@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 cp -r linux64 nekobox.AppDir
 
@@ -26,9 +27,9 @@ chmod +x nekobox.AppDir/AppRun
 
 # build
 
-curl -fLSO https://github.com/AppImage/AppImageKit/releases/latest/download/appimagetool-x86_64.AppImage
+curl -fLSO --retry 3 https://github.com/AppImage/appimagetool/releases/latest/download/appimagetool-x86_64.AppImage
 chmod +x appimagetool-x86_64.AppImage
-APPIMAGE_EXTRACT_AND_RUN=1 ./appimagetool-x86_64.AppImage nekobox.AppDir
+ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 ./appimagetool-x86_64.AppImage nekobox.AppDir nekobox-x86_64.AppImage
 
 # clean
 
