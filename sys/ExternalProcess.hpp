@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <QProcess>
+#include <QTemporaryFile>
 
 namespace NekoGui_sys {
     class ExternalProcess : public QProcess {
@@ -10,8 +11,10 @@ namespace NekoGui_sys {
         QString program;
         QStringList arguments;
         QStringList env;
+        std::shared_ptr<QTemporaryFile> temporaryConfig;
 
         bool managed = true; // MW_dialog_message
+        bool reportFailure = true;
 
         ExternalProcess();
         ~ExternalProcess();
@@ -19,6 +22,8 @@ namespace NekoGui_sys {
         // start & kill is one time
 
         virtual void Start();
+
+        QString StartChecked(const QStringList &checkArguments, const QList<QPair<QString, QString>> &assets, int port);
 
         void Kill();
 

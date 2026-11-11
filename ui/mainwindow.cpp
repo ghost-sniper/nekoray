@@ -2,6 +2,7 @@
 #include "mainwindow.h"
 
 #include "fmt/Preset.hpp"
+#include "fmt/CustomBean.hpp"
 #include "db/ProfileFilter.hpp"
 #include "db/ConfigBuilder.hpp"
 #include "sub/GroupUpdater.hpp"
@@ -102,7 +103,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->menubar->setVisible(false);
     connect(ui->toolButton_document, &QToolButton::clicked, this, [=] { QDesktopServices::openUrl(QUrl("https://matsuridayo.github.io/")); });
     connect(ui->toolButton_ads, &QToolButton::clicked, this, [=] { QDesktopServices::openUrl(QUrl("https://neko-box.pages.dev/喵")); });
-    connect(ui->toolButton_update, &QToolButton::clicked, this, [=] { runOnNewThread([=] { CheckUpdate(); }); });
+    connect(ui->toolButton_update, &QToolButton::clicked, this, &MainWindow::CheckUpdate);
     connect(ui->toolButton_url_test, &QToolButton::clicked, this, [=] { speedtest_current_group(1, true); });
 
     // Setup log UI
@@ -668,6 +669,14 @@ void MainWindow::on_menu_exit_triggered() {
         runOnNewThread([=] {
             sem_stopped.acquire();
             stop_core_daemon();
+            if (exit_reason == 1) {
+                QSemaphore coreStopped;
+                runOnUiThread([&] {
+                    if (core_process) core_process->Kill();
+                    coreStopped.release();
+                }, DS_cores);
+                coreStopped.acquire();
+            }
             runOnUiThread([=] {
                 on_menu_exit_triggered(); // continue exit progress
             });
@@ -677,8 +686,10 @@ void MainWindow::on_menu_exit_triggered() {
     //
     MF_release_runguard();
     if (exit_reason == 1) {
-        QDir::setCurrent(QApplication::applicationDirPath());
-        QProcess::startDetached("./updater", QStringList{});
+        if (!QProcess::startDetached(updateWorker, updateArguments, QApplication::applicationDirPath())) {
+            QFile::remove(updateWorker);
+            MessageBoxWarning(tr("Update Center"), tr("Could not start the update helper. Restart Nekoray and try again."));
+        }
     } else if (exit_reason == 2 || exit_reason == 3) {
         QDir::setCurrent(QApplication::applicationDirPath());
 
@@ -739,6 +750,15 @@ void MainWindow::neko_set_spmode_system_proxy(bool enable, bool save) {
 void MainWindow::neko_set_spmode_vpn(bool enable, bool save) {
     if (enable != NekoGui::dataStore->spmode_vpn) {
         if (enable) {
+            if (!mu_starting.tryLock()) {
+                MessageBoxWarning(software_name, tr("Wait for the profile to start before enabling TUN."));
+                neko_set_spmode_FAILED
+            }
+            mu_starting.unlock();
+            if (running && running->type == "custom" && running->CustomBean()->managed_core) {
+                MessageBoxWarning(software_name, tr("Stop the external core configuration before enabling TUN."));
+                neko_set_spmode_FAILED
+            }
             if (NekoGui::dataStore->vpn_internal_tun) {
                 bool requestPermission = !NekoGui::IsAdmin();
                 if (requestPermission) {

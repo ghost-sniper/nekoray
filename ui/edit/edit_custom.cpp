@@ -36,6 +36,17 @@ EditCustom::~EditCustom() {
 void EditCustom::onStart(std::shared_ptr<NekoGui::ProxyEntity> _ent) {
     this->ent = _ent;
     auto bean = this->ent->CustomBean();
+    if (bean->managed_core) {
+        const bool yaml = bean->core == "mihomo";
+        ui->core_l->setText(yaml ? tr("Paste a complete Mihomo YAML configuration.") : tr("Paste a complete JSON configuration."));
+        ui->core->hide();
+        ui->w_ext1->hide();
+        ui->w_ext2->hide();
+        ui->as_json->setVisible(!yaml);
+        ui->config_simple->setPlaceholderText({});
+        ui->config_simple->setPlainText(bean->config_simple);
+        return;
+    }
 
     // load known core
     auto core_map = QString2QJsonObject(NekoGui::dataStore->extraCore->core_map);
@@ -132,12 +143,15 @@ bool EditCustom::onEnd() {
         MessageBoxWarning(software_name, tr("Name cannot be empty."));
         return false;
     }
+    auto bean = this->ent->CustomBean();
+    if (bean->managed_core) {
+        bean->config_simple = ui->config_simple->toPlainText();
+        return true;
+    }
     if (ui->core->currentText().isEmpty()) {
         MessageBoxWarning(software_name, tr("Please pick a core."));
         return false;
     }
-
-    auto bean = this->ent->CustomBean();
 
     SAVE_CUSTOM_BEAN
 

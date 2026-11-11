@@ -2,6 +2,7 @@
 
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QTemporaryFile>
 
 #include "main/NekoGui.hpp"
 
@@ -22,6 +23,11 @@ namespace NekoGui_fmt {
         //
         QString error;
         QString config_export;
+        std::shared_ptr<QTemporaryFile> temporaryConfig;
+        QString workingDirectory;
+        QStringList checkArguments;
+        QList<QPair<QString, QString>> assets;
+        int readyPort = 0;
     };
 
     class AbstractBean : public JsonStore {

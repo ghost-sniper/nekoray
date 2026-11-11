@@ -11,6 +11,7 @@ namespace NekoGui_fmt {
         QString config_simple;
         int mapping_port = 0;
         int socks_port = 0;
+        bool managed_core = false;
 
         CustomBean() : AbstractBean(0) {
             _add(new configItem("core", &core, itemType::string));
@@ -19,6 +20,7 @@ namespace NekoGui_fmt {
             _add(new configItem("cs_suffix", &config_suffix, itemType::string));
             _add(new configItem("mapping_port", &mapping_port, itemType::integer));
             _add(new configItem("socks_port", &socks_port, itemType::integer));
+            _add(new configItem("managed_core", &managed_core, itemType::boolean));
         };
 
         QString DisplayType() override {
@@ -34,6 +36,7 @@ namespace NekoGui_fmt {
         QString DisplayCoreType() override { return NeedExternal(true) == 0 ? software_core_name : core; };
 
         QString DisplayAddress() override {
+            if (managed_core) return {};
             if (core == "internal") {
                 auto obj = QString2QJsonObject(config_simple);
                 return ::DisplayAddress(obj["server"].toString(), obj["server_port"].toInt());
@@ -46,6 +49,8 @@ namespace NekoGui_fmt {
         int NeedExternal(bool isFirstProfile) override;
 
         ExternalBuildResult BuildExternal(int mapping_port, int socks_port, int external_stat) override;
+
+        ExternalBuildResult BuildManagedExternal(int socks_port) const;
 
         CoreObjOutboundBuildResult BuildCoreObjSingBox() override;
     };

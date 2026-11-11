@@ -7,7 +7,7 @@ mkdir -p nekoray/opt
 cp -r linux64 nekoray/opt/
 mv nekoray/opt/linux64 nekoray/opt/nekoray
 rm -rf nekoray/opt/nekoray/usr
-rm nekoray/opt/nekoray/launcher
+mv nekoray/opt/nekoray/launcher nekoray/opt/nekoray/updater
 
 # basic
 cat >nekoray/DEBIAN/control <<-EOF

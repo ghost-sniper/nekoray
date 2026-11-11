@@ -449,6 +449,18 @@
         <source>Reality short id. Accept only one value.</source>
         <translation>Reality short id. 只接受一个值。</translation>
     </message>
+    <message>
+        <source>Xray JSON</source>
+        <translation>Xray JSON</translation>
+    </message>
+    <message>
+        <source>Mihomo YAML</source>
+        <translation>Mihomo YAML</translation>
+    </message>
+    <message>
+        <source>sing-box JSON</source>
+        <translation>sing-box JSON</translation>
+    </message>
 </context>
 <context>
     <name>DialogHotkey</name>
@@ -806,6 +818,14 @@ This needs to be run NekoBox with administrator privileges.</source>
     <message>
         <source>Name cannot be empty.</source>
         <translation>名称 不能为空</translation>
+    </message>
+    <message>
+        <source>Paste a complete Mihomo YAML configuration.</source>
+        <translation>粘贴完整的 Mihomo YAML 配置。</translation>
+    </message>
+    <message>
+        <source>Paste a complete JSON configuration.</source>
+        <translation>粘贴完整的 JSON 配置。</translation>
     </message>
 </context>
 <context>
@@ -1502,6 +1522,42 @@ Split by line.</source>
         <source>URL Test</source>
         <translation>URL 测试</translation>
     </message>
+    <message>
+        <source>Update Center</source>
+        <translation>更新中心</translation>
+    </message>
+    <message>
+        <source>Could not start the update helper. Restart Nekoray and try again.</source>
+        <translation>无法启动更新助手。请重启 Nekoray 后重试。</translation>
+    </message>
+    <message>
+        <source>Stop the external core configuration before enabling TUN.</source>
+        <translation>启用 TUN 前，请先停止外部核心配置。</translation>
+    </message>
+    <message>
+        <source>Core not installed</source>
+        <translation>核心未安装</translation>
+    </message>
+    <message>
+        <source>%1 is not installed. Open the update center?</source>
+        <translation>%1 尚未安装。是否打开更新中心？</translation>
+    </message>
+    <message>
+        <source>Could not prepare the update helper.</source>
+        <translation>无法准备更新助手。</translation>
+    </message>
+    <message>
+        <source>Could not copy the update helper.</source>
+        <translation>无法复制更新助手。</translation>
+    </message>
+    <message>
+        <source>Wait for the profile to start before enabling TUN.</source>
+        <translation>请等待当前配置启动后再启用 TUN。</translation>
+    </message>
+    <message>
+        <source>Could not stop the previous profile.</source>
+        <translation>无法停止上一个配置。</translation>
+    </message>
 </context>
 <context>
     <name>ProxyItem</name>
@@ -1653,12 +1709,245 @@ Release note:
         <source>The last speed test did not exit completely, please wait. If it persists, please restart the program.</source>
         <translation>上次速度测试未完全退出，请等待。如果问题仍然存在，请重新启动程序。</translation>
     </message>
+    <message>
+        <source>Cannot create the core data directory.</source>
+        <translation>无法创建核心数据目录。</translation>
+    </message>
+    <message>
+        <source>The external core configuration check timed out.</source>
+        <translation>外部核心配置检查超时。</translation>
+    </message>
+    <message>
+        <source>The external core rejected the configuration:
+%1</source>
+        <translation>外部核心拒绝了该配置：
+%1</translation>
+    </message>
+    <message>
+        <source>The external core did not open its local SOCKS listener. See the core log.</source>
+        <translation>外部核心未启动本地 SOCKS 监听。请查看核心日志。</translation>
+    </message>
+    <message>
+        <source>Unknown external core.</source>
+        <translation>未知的外部核心。</translation>
+    </message>
+    <message>
+        <source>Could not allocate a local SOCKS port.</source>
+        <translation>无法分配本地 SOCKS 端口。</translation>
+    </message>
+    <message>
+        <source>Disable TUN in the external core configuration.</source>
+        <translation>请在外部核心配置中禁用 TUN。</translation>
+    </message>
+    <message>
+        <source>Invalid Mihomo YAML: %1</source>
+        <translation>Mihomo YAML 无效：%1</translation>
+    </message>
+    <message>
+        <source>This build requires YAML support to run Mihomo configurations.</source>
+        <translation>运行 Mihomo 配置需要启用 YAML 支持。</translation>
+    </message>
+    <message>
+        <source>Expected a JSON configuration object: %1</source>
+        <translation>需要一个 JSON 配置对象：%1</translation>
+    </message>
+    <message>
+        <source>The inbounds field must be an array.</source>
+        <translation>inbounds 字段必须是数组。</translation>
+    </message>
+    <message>
+        <source>The inbound tag %1 is reserved.</source>
+        <translation>入站标签 %1 已被保留。</translation>
+    </message>
+    <message>
+        <source>Could not create the temporary configuration directory.</source>
+        <translation>无法创建临时配置目录。</translation>
+    </message>
+    <message>
+        <source>External core configurations cannot be used in a proxy chain.</source>
+        <translation>外部核心配置无法用于代理链。</translation>
+    </message>
+    <message>
+        <source>Disable Nekoray TUN before starting an external core configuration.</source>
+        <translation>启动外部核心配置前，请先禁用 Nekoray TUN。</translation>
+    </message>
 </context>
 <context>
     <name>Qv2ray::ui::widgets::AutoCompleteTextEdit</name>
     <message>
         <source>You can not input space characters here.</source>
         <translation></translation>
+    </message>
+</context>
+<context>
+    <name>UpdateDialog</name>
+    <message>
+        <source>Update Center</source>
+        <translation>更新中心</translation>
+    </message>
+    <message>
+        <source>Nekoray</source>
+        <translation>Nekoray</translation>
+    </message>
+    <message>
+        <source>Official sing-box</source>
+        <translation>官方 sing-box</translation>
+    </message>
+    <message>
+        <source>Xray</source>
+        <translation>Xray</translation>
+    </message>
+    <message>
+        <source>Mihomo</source>
+        <translation>Mihomo</translation>
+    </message>
+    <message>
+        <source>GeoIP</source>
+        <translation>GeoIP</translation>
+    </message>
+    <message>
+        <source>GeoSite</source>
+        <translation>GeoSite</translation>
+    </message>
+    <message>
+        <source>Component</source>
+        <translation>组件</translation>
+    </message>
+    <message>
+        <source>Installed</source>
+        <translation>已安装</translation>
+    </message>
+    <message>
+        <source>Available</source>
+        <translation>可用版本</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>状态</translation>
+    </message>
+    <message>
+        <source>Action</source>
+        <translation>操作</translation>
+    </message>
+    <message>
+        <source>Check for updates</source>
+        <translation>检查更新</translation>
+    </message>
+    <message>
+        <source>Update selected</source>
+        <translation>更新所选项</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>关闭</translation>
+    </message>
+    <message>
+        <source>Previous Nekoray update failed: %1</source>
+        <translation>上一次 Nekoray 更新失败：%1</translation>
+    </message>
+    <message>
+        <source>The update helper is missing from the application directory.</source>
+        <translation>应用目录中缺少更新助手。</translation>
+    </message>
+    <message>
+        <source>Downloading %1%</source>
+        <translation>下载中 %1%</translation>
+    </message>
+    <message>
+        <source>The update helper exited without a result.</source>
+        <translation>更新助手退出，未返回结果。</translation>
+    </message>
+    <message>
+        <source>The update helper did not finish successfully.</source>
+        <translation>更新助手执行失败。</translation>
+    </message>
+    <message>
+        <source>Wait for the running tests or profile transition before restarting.</source>
+        <translation>请等待测速或配置切换结束后再重启。</translation>
+    </message>
+    <message>
+        <source>Restart Nekoray</source>
+        <translation>重启 Nekoray</translation>
+    </message>
+    <message>
+        <source>Restart Nekoray to apply the downloaded update?</source>
+        <translation>是否重启 Nekoray 以应用已下载的更新？</translation>
+    </message>
+    <message>
+        <source>Stop profile</source>
+        <translation>停止配置</translation>
+    </message>
+    <message>
+        <source>Stop the running profile before applying this update?</source>
+        <translation>是否先停止正在运行的配置，再应用更新？</translation>
+    </message>
+    <message>
+        <source>Apply the update after the profile has stopped.</source>
+        <translation>配置停止后，点击「应用」。</translation>
+    </message>
+    <message>
+        <source>Wait for the running profile or tests to stop, then apply the update.</source>
+        <translation>等待正在运行的配置或测速停止后，再应用更新。</translation>
+    </message>
+    <message>
+        <source>Bundled or system</source>
+        <translation>随包或系统提供</translation>
+    </message>
+    <message>
+        <source>Not installed</source>
+        <translation>未安装</translation>
+    </message>
+    <message>
+        <source>Checking…</source>
+        <translation>正在检查…</translation>
+    </message>
+    <message>
+        <source>Preparing…</source>
+        <translation>正在准备…</translation>
+    </message>
+    <message>
+        <source>No release yet</source>
+        <translation>暂无发行版</translation>
+    </message>
+    <message>
+        <source>No compatible package</source>
+        <translation>没有兼容的发行包</translation>
+    </message>
+    <message>
+        <source>Up to date</source>
+        <translation>已是最新版本</translation>
+    </message>
+    <message>
+        <source>Updated</source>
+        <translation>更新完成</translation>
+    </message>
+    <message>
+        <source>Update available</source>
+        <translation>有可用更新</translation>
+    </message>
+    <message>
+        <source>Download</source>
+        <translation>下载</translation>
+    </message>
+    <message>
+        <source>Ready to apply</source>
+        <translation>可应用</translation>
+    </message>
+    <message>
+        <source>Restart</source>
+        <translation>重启</translation>
+    </message>
+    <message>
+        <source>Apply</source>
+        <translation>应用</translation>
+    </message>
+    <message>
+        <source>Retry</source>
+        <translation>重试</translation>
+    </message>
+    <message>
+        <source>Releases</source>
+        <translation>发行页</translation>
     </message>
 </context>
 </TS>

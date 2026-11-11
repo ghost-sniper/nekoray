@@ -126,6 +126,7 @@ set(PROJECT_SOURCES
         main/NekoGui.cpp
         main/NekoGui_Utils.cpp
         main/HTTPRequestHelper.cpp
+        main/ManagedComponents.cpp
 
         3rdparty/base64.cpp
         3rdparty/qrcodegen.cpp
@@ -165,6 +166,7 @@ set(PROJECT_SOURCES
 
         ui/mainwindow_grpc.cpp
         ui/mainwindow.cpp
+        ui/dialog_updates.cpp
         ui/mainwindow.h
         ui/mainwindow.ui
 

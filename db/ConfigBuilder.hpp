@@ -7,6 +7,7 @@ namespace NekoGui {
     class BuildConfigResult {
     public:
         QString error;
+        QString missingManagedCore;
         QJsonObject coreConfig;
 
         QList<std::shared_ptr<NekoGui_traffic::TrafficData>> outboundStats; // all, but not including "bypass" "block"

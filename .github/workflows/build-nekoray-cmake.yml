@@ -25,20 +25,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checking out sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Go Status
         run: git ls-files go | xargs cat | sha1sum > go_status
       - name: Cache Common Download
         id: cache-common
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: artifacts.tgz
           key: CommonCache-${{ matrix.cross_os }}-${{ matrix.cross_arch }}-${{ hashFiles('libs/*.sh', 'go_status', '*.txt') }}
       - name: Install Golang
         if: steps.cache-common.outputs.cache-hit != 'true'
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
-          go-version: ^1.22
+          go-version: '1.22.12'
+          cache: false
       - name: Build golang parts
         if: steps.cache-common.outputs.cache-hit != 'true'
         shell: bash
@@ -51,7 +52,7 @@ jobs:
         if: steps.cache-common.outputs.cache-hit != 'true'
         run: tar czvf artifacts.tgz ./deployment
       - name: Uploading Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: NekoRay-${{ github.sha }}-Common-${{ matrix.cross_os }}-${{ matrix.cross_arch }}
           path: artifacts.tgz
@@ -62,7 +63,7 @@ jobs:
           - platform: windows-2022
             arch: x64
             qt_version: "6.7"
-          - platform: ubuntu-20.04
+          - platform: ubuntu-24.04
             arch: x64
             qt_version: "5.12"
       fail-fast: false
@@ -72,7 +73,7 @@ jobs:
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
     steps:
       - name: Checking out sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: "recursive"
       - name: Install MSVC compiler
@@ -94,17 +95,17 @@ jobs:
         uses: seanmiddleditch/gha-setup-ninja@v3
       - name: Cache Download
         id: cache-deps
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: libs/deps
           key: DepsCache-${{ matrix.platform }}-${{ matrix.arch }}-${{ hashFiles('libs/build_deps_*.sh') }}-Qt${{ matrix.qt_version }}
       - name: Build Dependencies
         shell: bash
-        if: steps.cache-deps.outputs.cache-hit != 'true' && matrix.platform != 'ubuntu-20.04'
+        if: steps.cache-deps.outputs.cache-hit != 'true' && matrix.platform != 'ubuntu-24.04'
         run: ./libs/build_deps_all.sh
       - name: Build Dependencies (Docker)
         shell: bash
-        if: steps.cache-deps.outputs.cache-hit != 'true' && matrix.platform == 'ubuntu-20.04'
+        if: steps.cache-deps.outputs.cache-hit != 'true' && matrix.platform == 'ubuntu-24.04'
         run: |
           docker run --rm \
             -v $PWD:/nekoray \
@@ -129,7 +130,7 @@ jobs:
           ./libs/deploy_windows64.sh
       - name: Linux - Generate MakeFile and Build
         shell: bash
-        if: matrix.platform == 'ubuntu-20.04'
+        if: matrix.platform == 'ubuntu-24.04'
         run: |
           docker run --rm \
             -v $PWD:/nekoray \
@@ -141,7 +142,7 @@ jobs:
         shell: bash
         run: tar czvf artifacts.tgz ./deployment
       - name: Uploading Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: NekoRay-${{ github.sha }}-${{ matrix.platform }}-${{ matrix.arch }}-Qt${{ matrix.qt_version }}
           path: artifacts.tgz
@@ -149,22 +150,29 @@ jobs:
     name: Pack & Publish Release
     if: github.event.inputs.artifact-pack != 'y'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
     needs:
       - build-cpp
       - build-go
     steps:
       - name: Checking out sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Download Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: download-artifact
       - name: Pack
         run: |
-          curl -Lo - https://github.com/tcnksm/ghr/releases/download/v0.13.0/ghr_v0.13.0_linux_amd64.tar.gz | tar xzv
-          mv ghr*linux_amd64/ghr .
-          ####
           source libs/env_deploy.sh
+          release_version=${RELEASE_TAG#v}
+          package_version=${version_standalone#nekoray-}
+          if [[ "$package_version" != "$release_version" && ! "$package_version" =~ ^"$release_version"-[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "Release tag must match nekoray_version.txt, excluding the optional build date" >&2
+            exit 1
+          fi
           find . -name artifacts.tgz | xargs -n1 tar xvzf
           cd deployment
           cp -r public_res/* linux64
@@ -172,11 +180,11 @@ jobs:
           rm -rf public_res *.pdb
           ####
           mv linux64 nekoray
-          zip -r $version_standalone-linux64.zip nekoray
+          zip -q -r "$version_standalone-linux64.zip" nekoray
           rm -rf nekoray
           ####
           mv windows64 nekoray
-          zip -r $version_standalone-windows64.zip nekoray
+          zip -q -r "$version_standalone-windows64.zip" nekoray
           rm -rf nekoray
       - name: Pack Debian
         run: |
@@ -185,7 +193,7 @@ jobs:
           cd deployment
           cp -r public_res/* linux64
           ####
-          bash ../libs/package_debian.sh ${{ github.event.inputs.tag }}
+          bash ../libs/package_debian.sh "${RELEASE_TAG#v}"
           mv nekoray.deb $version_standalone-debian-x64.deb
           sudo rm -rf nekoray
       - name: Pack AppImage
@@ -205,11 +213,17 @@ jobs:
           rm -rf public_res
           rm -rf *.pdb
       - name: Uploading Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Deployment-${{ github.sha }}
           path: deployment
       - name: Release
         if: github.event.inputs.publish != 'y'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          ./ghr -delete -t "${{ github.token }}" -n "${{ github.event.inputs.tag }}" "${{ github.event.inputs.tag }}" deployment
+          tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq .sha)
+          test "$tag_sha" = "$GITHUB_SHA"
+          flags=()
+          if [[ "${RELEASE_TAG#v}" == *-* ]]; then flags+=(--prerelease); fi
+          gh release create "$RELEASE_TAG" deployment/* --verify-tag --title "$RELEASE_TAG" --generate-notes "${flags[@]}"

@@ -1,5 +1,8 @@
 #include "./ui_mainwindow.h"
 #include "mainwindow.h"
+#include "ui/dialog_updates.h"
+#include "main/ManagedComponents.hpp"
+#include "fmt/CustomBean.hpp"
 
 #include "db/Database.hpp"
 #include "db/ConfigBuilder.hpp"
@@ -8,16 +11,22 @@
 #include "ui/widget/MessageBoxTimer.h"
 
 #include <QTimer>
+#include <QApplication>
 #include <QThread>
 #include <QInputDialog>
 #include <QPushButton>
-#include <QDesktopServices>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QTemporaryFile>
 #include <QMessageBox>
 #include <QDialogButtonBox>
+#include <atomic>
 
 // ext core
 
-std::list<std::shared_ptr<NekoGui_sys::ExternalProcess>> CreateExtCFromExtR(const std::list<std::shared_ptr<NekoGui_fmt::ExternalBuildResult>> &extRs, bool start) {
+static std::list<std::shared_ptr<NekoGui_sys::ExternalProcess>> CreateExtCFromExtR(
+    const std::list<std::shared_ptr<NekoGui_fmt::ExternalBuildResult>> &extRs, QString &error) {
     // plz run and start in same thread
     std::list<std::shared_ptr<NekoGui_sys::ExternalProcess>> l;
     for (const auto &extR: extRs) {
@@ -26,9 +35,20 @@ std::list<std::shared_ptr<NekoGui_sys::ExternalProcess>> CreateExtCFromExtR(cons
         extC->program = extR->program;
         extC->arguments = extR->arguments;
         extC->env = extR->env;
+        extC->temporaryConfig = extR->temporaryConfig;
+        extC->setWorkingDirectory(extR->workingDirectory);
         l.emplace_back(extC);
-        //
-        if (start) extC->Start();
+        if (extR->readyPort > 0) {
+            extC->reportFailure = false;
+            error = extC->StartChecked(extR->checkArguments, extR->assets, extR->readyPort);
+            if (!error.isEmpty()) {
+                for (const auto &process : l) process->Kill();
+                l.clear();
+                break;
+            }
+        } else {
+            extC->Start();
+        }
     }
     return l;
 }
@@ -55,10 +75,11 @@ void MainWindow::setup_grpc() {
 
 // 测速
 
-inline bool speedtesting = false;
+inline std::atomic_bool speedtesting{false};
 inline QList<QThread *> speedtesting_threads = {};
 
 void MainWindow::speedtest_current_group(int mode, bool test_group) {
+    if (updateDialogOpen) return;
     if (speedtesting) {
         MessageBoxWarning(software_name, QObject::tr("The last speed test did not exit completely, please wait. If it persists, please restart the program."));
         return;
@@ -171,14 +192,22 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
                         }
                         //
                         if (!c->extRs.empty()) {
+                            QString externalError;
                             runOnUiThread(
                                 [&] {
-                                    extCs = CreateExtCFromExtR(c->extRs, true);
-                                    QThread::msleep(500);
+                                    extCs = CreateExtCFromExtR(c->extRs, externalError);
+                                    if (c->extRs.front()->readyPort == 0) QThread::msleep(500);
                                     extSem.release();
                                 },
                                 DS_cores);
                             extSem.acquire();
+                            if (!externalError.isEmpty()) {
+                                profile->full_test_report = externalError;
+                                profile->Save();
+                                const auto profileId = profile->id;
+                                runOnUiThread([=] { refresh_proxy_list(profileId); });
+                                continue;
+                            }
                         }
                         //
                         auto config = new libcore::LoadConfigReq;
@@ -278,12 +307,12 @@ void MainWindow::speedtest_current() {
 
 void MainWindow::stop_core_daemon() {
 #ifndef NKR_NO_GRPC
-    NekoGui_rpc::defaultClient->Exit();
+    if (NekoGui_rpc::defaultClient != nullptr) NekoGui_rpc::defaultClient->Exit();
 #endif
 }
 
 void MainWindow::neko_start(int _id) {
-    if (NekoGui::dataStore->prepare_exit) return;
+    if (NekoGui::dataStore->prepare_exit || updateDialogOpen) return;
 
     auto ents = get_now_selected_list();
     auto ent = (_id < 0 && !ents.isEmpty()) ? ents.first() : NekoGui::profileManager->GetProfile(_id);
@@ -301,11 +330,18 @@ void MainWindow::neko_start(int _id) {
 
     auto result = BuildConfig(ent, false, false);
     if (!result->error.isEmpty()) {
-        MessageBoxWarning("BuildConfig return error", result->error);
+        if (!result->missingManagedCore.isEmpty()) {
+            if (QMessageBox::question(this, tr("Core not installed"),
+                                      tr("%1 is not installed. Open the update center?").arg(result->missingManagedCore)) == QMessageBox::Yes)
+                CheckUpdate();
+        } else {
+            MessageBoxWarning("BuildConfig return error", result->error);
+        }
         return;
     }
 
-    auto neko_start_stage2 = [=] {
+    const bool managedCore = !result->extRs.empty() && result->extRs.front()->readyPort > 0;
+    auto neko_start_stage2 = [=](std::list<std::shared_ptr<NekoGui_sys::ExternalProcess>> &prepared) {
 #ifndef NKR_NO_GRPC
         libcore::LoadConfigReq req;
         req.set_core_config(QJsonObject2QString(result->coreConfig, false).toStdString());
@@ -330,15 +366,24 @@ void MainWindow::neko_start(int _id) {
         NekoGui_traffic::trafficLooper->loop_enabled = true;
 #endif
 
+        NekoGui::dataStore->UpdateStartedId(ent->id);
+        running = ent;
+        if (managedCore) NekoGui::dataStore->need_keep_vpn_off = true;
+
         runOnUiThread(
-            [=] {
-                auto extCs = CreateExtCFromExtR(result->extRs, true);
+            [managedCore, result, extCs = std::move(prepared)]() mutable {
+                if (!managedCore) {
+                    QString externalError;
+                    extCs = CreateExtCFromExtR(result->extRs, externalError);
+                }
+                for (const auto &process : extCs) {
+                    process->reportFailure = true;
+                    if (process->state() == QProcess::NotRunning && managedCore)
+                        MW_dialog_message("ExternalProcess", "Crashed");
+                }
                 NekoGui_sys::running_ext.splice(NekoGui_sys::running_ext.end(), extCs);
             },
             DS_cores);
-
-        NekoGui::dataStore->UpdateStartedId(ent->id);
-        running = ent;
 
         runOnUiThread([=] {
             refresh_status();
@@ -379,14 +424,30 @@ void MainWindow::neko_start(int _id) {
     auto restartMsgboxTimer = new MessageBoxTimer(this, restartMsgbox, 5000);
 
     runOnNewThread([=] {
+        std::list<std::shared_ptr<NekoGui_sys::ExternalProcess>> prepared;
+        QString externalError;
+        if (managedCore) {
+            QSemaphore ready;
+            runOnUiThread([&] {
+                prepared = CreateExtCFromExtR(result->extRs, externalError);
+                ready.release();
+            }, DS_cores);
+            ready.acquire();
+        }
         // stop current running
-        if (NekoGui::dataStore->started_id >= 0) {
+        if (externalError.isEmpty() && NekoGui::dataStore->started_id >= 0) {
             runOnUiThread([=] { neko_stop(false, true); });
             sem_stopped.acquire();
+            if (managedCore && NekoGui::dataStore->started_id >= 0)
+                externalError = tr("Could not stop the previous profile.");
         }
         // do start
         MW_show_log(">>>>>>>> " + tr("Starting profile %1").arg(ent->bean->DisplayTypeAndName()));
-        if (!neko_start_stage2()) {
+        if (!externalError.isEmpty() || !neko_start_stage2(prepared)) {
+            if (!externalError.isEmpty()) runOnUiThread([=] { MessageBoxWarning(software_name, externalError); });
+            if (!prepared.empty()) runOnUiThread([processes = std::move(prepared)] {
+                for (const auto &process : processes) process->Kill();
+            }, DS_cores);
             MW_show_log("<<<<<<<< " + tr("Failed to start profile %1").arg(ent->bean->DisplayTypeAndName()));
         }
         mu_starting.unlock();
@@ -488,67 +549,74 @@ void MainWindow::neko_stop(bool crash, bool sem) {
 }
 
 void MainWindow::CheckUpdate() {
-    // on new thread...
-#ifndef NKR_NO_GRPC
-    bool ok;
-    libcore::UpdateReq request;
-    request.set_action(libcore::UpdateAction::Check);
-    request.set_check_pre_release(NekoGui::dataStore->check_include_pre);
-    auto response = NekoGui_rpc::defaultClient->Update(&ok, request);
-    if (!ok) return;
+    if (updateDialogOpen || NekoGui::dataStore->prepare_exit) return;
 
-    auto err = response.error();
-    if (!err.empty()) {
-        runOnUiThread([=] {
-            MessageBoxWarning(QObject::tr("Update"), err.c_str());
-        });
-        return;
-    }
-
-    if (response.release_download_url() == nullptr) {
-        runOnUiThread([=] {
-            MessageBoxInfo(QObject::tr("Update"), QObject::tr("No update"));
-        });
-        return;
-    }
-
-    runOnUiThread([=] {
-        auto allow_updater = !NekoGui::dataStore->flag_use_appdata;
-        auto note_pre_release = response.is_pre_release() ? " (Pre-release)" : "";
-        QMessageBox box(QMessageBox::Question, QObject::tr("Update") + note_pre_release,
-                        QObject::tr("Update found: %1\nRelease note:\n%2").arg(response.assets_name().c_str(), response.release_note().c_str()));
-        //
-        QAbstractButton *btn1 = nullptr;
-        if (allow_updater) {
-            btn1 = box.addButton(QObject::tr("Update"), QMessageBox::AcceptRole);
-        }
-        QAbstractButton *btn2 = box.addButton(QObject::tr("Open in browser"), QMessageBox::AcceptRole);
-        box.addButton(QObject::tr("Close"), QMessageBox::RejectRole);
-        box.exec();
-        //
-        if (btn1 == box.clickedButton() && allow_updater) {
-            // Download Update
-            runOnNewThread([=] {
-                bool ok2;
-                libcore::UpdateReq request2;
-                request2.set_action(libcore::UpdateAction::Download);
-                auto response2 = NekoGui_rpc::defaultClient->Update(&ok2, request2);
-                runOnUiThread([=] {
-                    if (response2.error().empty()) {
-                        auto q = QMessageBox::question(nullptr, QObject::tr("Update"),
-                                                       QObject::tr("Update is ready, restart to install?"));
-                        if (q == QMessageBox::StandardButton::Yes) {
-                            this->exit_reason = 1;
-                            on_menu_exit_triggered();
-                        }
-                    } else {
-                        MessageBoxWarning(QObject::tr("Update"), response2.error().c_str());
-                    }
-                });
-            });
-        } else if (btn2 == box.clickedButton()) {
-            QDesktopServices::openUrl(QUrl(response.release_url().c_str()));
-        }
-    });
+    const auto root = NekoGui::ManagedComponentsRoot();
+    const auto installDirectory = QApplication::applicationDirPath();
+#ifdef Q_OS_WIN
+    const bool portablePackage = QFileInfo(installDirectory + "/updater.exe").isFile();
+#else
+    const bool portablePackage = QFileInfo(installDirectory + "/launcher").isExecutable();
 #endif
+    const bool portable = portablePackage && QFileInfo(installDirectory).isWritable() &&
+                          !NekoGui::dataStore->flag_many && !qEnvironmentVariableIsSet("APPIMAGE") &&
+                          !qEnvironmentVariableIsSet("APPDIR");
+
+    auto canApply = [this](const QString &id) {
+        if (speedtesting || !mu_starting.tryLock()) return false;
+        if (!mu_stopping.tryLock()) {
+            mu_starting.unlock();
+            return false;
+        }
+        const bool active = NekoGui::dataStore->started_id >= 0;
+        const bool geo = id == "geoip" || id == "geosite";
+        const auto bean = active && running && running->type == "custom" ? running->CustomBean() : nullptr;
+        const bool allowed = !active || id == "nekoray" || (!geo && !(bean && bean->managed_core && bean->core == id));
+        mu_stopping.unlock();
+        mu_starting.unlock();
+        return allowed;
+    };
+
+    updateDialogOpen = true;
+    UpdateDialog dialog(root, portable, canApply, [this] { neko_stop(); }, this);
+    dialog.exec();
+    updateDialogOpen = false;
+    if (dialog.appRevision().isEmpty()) return;
+
+    // The detached copy must be outside the installation being replaced, especially on Windows.
+    QFile source(NekoGui::UpdateHelperProgram());
+#ifdef Q_OS_WIN
+    const auto workerName = QStringLiteral("nekoray-updater-XXXXXX.exe");
+#else
+    const auto workerName = QStringLiteral("nekoray-updater-XXXXXX");
+#endif
+    QTemporaryFile worker(QDir::temp().absoluteFilePath(workerName));
+    if (!source.open(QIODevice::ReadOnly) || !worker.open() ||
+        !worker.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner)) {
+        MessageBoxWarning(tr("Update Center"), tr("Could not prepare the update helper."));
+        return;
+    }
+    while (!source.atEnd()) {
+        const auto chunk = source.read(64 * 1024);
+        if (chunk.isEmpty() || worker.write(chunk) != chunk.size()) {
+            MessageBoxWarning(tr("Update Center"), tr("Could not copy the update helper."));
+            return;
+        }
+    }
+    if (!worker.flush()) {
+        MessageBoxWarning(tr("Update Center"), worker.errorString());
+        return;
+    }
+    worker.close();
+    worker.setAutoRemove(false);
+    updateWorker = worker.fileName();
+    const bool launcher = qEnvironmentVariable("NKR_FROM_LAUNCHER") == "1";
+    updateArguments = QStringList{"components", "apply", root, dialog.appRevision(), installDirectory,
+                                  QString::number(QCoreApplication::applicationPid()), launcher ? "launcher" : "gui"};
+    auto originalArgs = NekoGui::dataStore->argv.mid(1);
+    originalArgs.removeAll("-flag_restart_tun_on");
+    originalArgs.removeAll("-flag_reorder");
+    updateArguments += originalArgs;
+    exit_reason = 1;
+    on_menu_exit_triggered();
 }

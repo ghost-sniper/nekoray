@@ -119,6 +119,9 @@ DialogEditProfile::DialogEditProfile(const QString &_type, int profileOrGroupId,
         ui->type->addItem(tr("Custom (%1 outbound)").arg(software_core_name), "internal");
         ui->type->addItem(tr("Custom (%1 config)").arg(software_core_name), "internal-full");
         ui->type->addItem(tr("Custom (Extra Core)"), "custom");
+        ui->type->addItem(tr("Xray JSON"), "managed-xray");
+        ui->type->addItem(tr("Mihomo YAML"), "managed-mihomo");
+        ui->type->addItem(tr("sing-box JSON"), "managed-sing-box");
         LOAD_TYPE("chain")
 
         // type changed
@@ -144,6 +147,8 @@ DialogEditProfile::~DialogEditProfile() {
 
 void DialogEditProfile::typeSelected(const QString &newType) {
     QString customType;
+    const bool managedCore = newType.startsWith("managed-") ||
+                             (!newEnt && ent->type == "custom" && ent->CustomBean()->managed_core);
     type = newType;
     bool validType = true;
 
@@ -175,11 +180,11 @@ void DialogEditProfile::typeSelected(const QString &newType) {
         auto _innerWidget = new EditQUIC(this);
         innerWidget = _innerWidget;
         innerEditor = _innerWidget;
-    } else if (type == "custom" || type == "internal" || type == "internal-full") {
+    } else if (type == "custom" || type == "internal" || type == "internal-full" || managedCore) {
         auto _innerWidget = new EditCustom(this);
         innerWidget = _innerWidget;
         innerEditor = _innerWidget;
-        customType = newEnt ? type : ent->CustomBean()->core;
+        customType = newEnt ? (managedCore ? type.mid(8) : type) : ent->CustomBean()->core;
         if (customType != "custom") _innerWidget->preset_core = customType;
         type = "custom";
     } else {
@@ -194,10 +199,14 @@ void DialogEditProfile::typeSelected(const QString &newType) {
     if (newEnt) {
         this->ent = NekoGui::ProfileManager::NewProxyEntity(type);
         this->ent->gid = groupId;
+        if (managedCore) {
+            ent->CustomBean()->managed_core = true;
+            ent->CustomBean()->core = customType;
+        }
     }
 
     // hide some widget
-    auto showAddressPort = type != "chain" && customType != "internal" && customType != "internal-full";
+    auto showAddressPort = !managedCore && type != "chain" && customType != "internal" && customType != "internal-full";
     ui->address->setVisible(showAddressPort);
     ui->address_l->setVisible(showAddressPort);
     ui->port->setVisible(showAddressPort);
@@ -236,7 +245,10 @@ void DialogEditProfile::typeSelected(const QString &newType) {
     CACHE.custom_outbound = ent->bean->custom_outbound;
     bool show_custom_config = true;
     bool show_custom_outbound = true;
-    if (type == "chain") {
+    if (managedCore) {
+        show_custom_outbound = false;
+        show_custom_config = false;
+    } else if (type == "chain") {
         show_custom_outbound = false;
     } else if (type == "custom") {
         if (customType == "internal") {

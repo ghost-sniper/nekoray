@@ -12,6 +12,12 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "components" {
+		if err := runComponents(os.Args[2:]); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	// update & launcher
 	exe, err := os.Executable()
 	if err != nil {

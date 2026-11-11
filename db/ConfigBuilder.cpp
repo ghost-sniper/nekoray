@@ -236,6 +236,16 @@ namespace NekoGui {
             }
 
             // chain rules: this
+            const auto custom = ent->type == "custom" ? ent->CustomBean() : nullptr;
+            const bool managedCore = custom != nullptr && custom->managed_core;
+            if (managedCore && (ents.length() != 1 || status->ent->type == "chain")) {
+                status->result->error = QObject::tr("External core configurations cannot be used in a proxy chain.");
+                return {};
+            }
+            if (managedCore && dataStore->spmode_vpn) {
+                status->result->error = QObject::tr("Disable Nekoray TUN before starting an external core configuration.");
+                return {};
+            }
             auto ext_mapping_port = 0;
             auto ext_socks_port = 0;
             auto thisExternalStat = ent->bean->NeedExternal(isFirstProfile);
@@ -246,7 +256,9 @@ namespace NekoGui {
 
             // determine port
             if (thisExternalStat > 0) {
-                if (ent->type == "custom") {
+                if (managedCore) {
+                    ext_socks_port = MkPort();
+                } else if (ent->type == "custom") {
                     auto bean = ent->CustomBean();
                     if (IsValidPort(bean->mapping_port)) {
                         ext_mapping_port = bean->mapping_port;
@@ -263,7 +275,7 @@ namespace NekoGui {
                     ext_socks_port = MkPort();
                 }
             }
-            if (thisExternalStat == 2) dataStore->need_keep_vpn_off = true;
+            if (thisExternalStat == 2 && !managedCore) dataStore->need_keep_vpn_off = true;
             if (thisExternalStat == 1) {
                 // mapping
                 status->inbounds += QJsonObject{
@@ -290,7 +302,12 @@ namespace NekoGui {
 
             if (thisExternalStat > 0) {
                 auto extR = ent->bean->BuildExternal(ext_mapping_port, ext_socks_port, thisExternalStat);
+                if (managedCore && !extR.error.isEmpty()) {
+                    status->result->error = extR.error;
+                    return {};
+                }
                 if (extR.program.isEmpty()) {
+                    if (managedCore) status->result->missingManagedCore = custom->core;
                     status->result->error = QObject::tr("Core not found: %1").arg(ent->bean->DisplayCoreType());
                     return {};
                 }

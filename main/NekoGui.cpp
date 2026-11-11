@@ -1,4 +1,5 @@
 #include "NekoGui.hpp"
+#include "main/ManagedComponents.hpp"
 #include "fmt/Preset.hpp"
 
 #include <QFile>
@@ -415,6 +416,10 @@ namespace NekoGui {
     // System Utils
 
     QString FindCoreAsset(const QString &name) {
+        if (name == "geoip.dat" || name == "geoip.db" || name == "geosite.dat" || name == "geosite.db") {
+            const auto managed = ManagedComponentFile(name.section('.', 0, 0), name);
+            if (!managed.isEmpty()) return managed;
+        }
         QStringList search{};
         search << QApplication::applicationDirPath();
         search << "/usr/share/sing-geoip";

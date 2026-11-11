@@ -14,9 +14,7 @@ Support Windows / Linux out of the box now.
 
 便携格式，无安装器。转到 Releases 下载预编译的二进制文件，解压后即可使用。
 
-[![GitHub All Releases](https://img.shields.io/github/downloads/Matsuridayo/nekoray/total?label=downloads-total&logo=github&style=flat-square)](https://github.com/Matsuridayo/nekoray/releases)
-
-[下载 / Download](https://github.com/Matsuridayo/nekoray/releases)
+[下载 / Download](https://github.com/ghost-sniper/nekoray/releases)
 
 [安装包的说明，如果你不知道要下载哪一个](https://github.com/MatsuriDayo/nekoray/wiki/Installation-package-description)
 
@@ -58,6 +56,14 @@ https://matsuridayo.github.io
 - Custom Outbound
 - Custom Config
 - Custom Core
+
+### 官方外部核心和更新中心
+
+在更新中心安装官方 sing-box、Xray 或 Mihomo，再新建 **sing-box JSON**、**Xray JSON** 或 **Mihomo YAML** 配置，粘贴对应核心的完整配置。Nekoray 自动加入本地 SOCKS 入站，支持通过现有本地入口和系统代理使用。使用这些配置前需退出 TUN，并从代理链中移除该配置。
+
+内置核心随本体更新。更新中心也可独立更新 GeoIP 和 GeoSite。便携版可在重启时安装本体更新，Debian 和 AppImage 用户可从更新中心打开本体发行页。
+
+源码构建时，将 `go/cmd/updater` 编译生成的 `updater`（Windows 为 `updater.exe`）放在 `nekobox` 同目录，以启用更新中心。
 
 ## 订阅 / Subscription
 
