@@ -10,7 +10,7 @@ git clone https://github.com/MatsuriDayo/nekoray.git --recursive
 
 条件：
 
-1. C++ 依赖：`protobuf yaml-cpp zxing-cpp` 已用包管理器安装，并符合版本要求。
+1. C++ 依赖：`yaml-cpp zxing-cpp` 已用包管理器安装，并符合版本要求。
 2. 已安装 `qtbase` `qtsvg` `qttools` `qtx11extras`
 3. 已安装 Qt `5.12.x` 或 `5.15.x`
 4. 系统为 `x86-64-linux-gnu`
@@ -37,7 +37,6 @@ ninja
 | NKR_NO_YAML       |                   | 不包含 yaml-cpp          |
 | NKR_NO_QHOTKEY    |                   | 不包含 qhotkey           |
 | NKR_NO_ZXING      |                   | 不包含 zxing             |
-| NKR_NO_GRPC       |                   | 不包含 gRPC              |
 | NKR_PACKAGE       |                   | 编译 package 版本 (aur)   |
 | NKR_LIBS          | ./libs/deps/built | 依赖搜索目录                |
 | NKR_DISABLE_LIBS  |                   | 禁用 NKR_LIBS           |

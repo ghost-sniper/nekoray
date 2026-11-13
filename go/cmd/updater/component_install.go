@@ -105,7 +105,10 @@ func (s *releaseService) download(ctx context.Context, asset releaseAsset, targe
 	sum := sha256.New()
 	progress := &downloadProgress{size: asset.Size, report: report}
 	n, copyErr := io.Copy(io.MultiWriter(file, sum, progress), io.LimitReader(response.Body, asset.Size+1))
-	err = errors.Join(copyErr, file.Sync(), file.Close())
+	if copyErr != nil {
+		return errors.Join(copyErr, file.Close())
+	}
+	err = errors.Join(file.Sync(), file.Close())
 	if err != nil {
 		return err
 	}
@@ -116,6 +119,9 @@ func (s *releaseService) download(ctx context.Context, asset releaseAsset, targe
 }
 
 func (s *releaseService) install(ctx context.Context, root string, event *componentEvent, candidate componentRelease, emit func(componentEvent)) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	parent := filepath.Join(root, event.ID)
 	if err := os.MkdirAll(parent, 0700); err != nil {
 		return err
@@ -127,6 +133,9 @@ func (s *releaseService) install(ctx context.Context, root string, event *compon
 	defer os.RemoveAll(stage)
 
 	for index, file := range candidate.Files {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		event.State, event.Progress = "downloading", index*100/len(candidate.Files)
 		emit(*event)
 		payload := filepath.Join(stage, file.Name)
@@ -138,6 +147,9 @@ func (s *releaseService) install(ctx context.Context, root string, event *compon
 			emit(*event)
 		})
 		if err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if file.Format != "raw" {
@@ -171,6 +183,11 @@ func (s *releaseService) install(ctx context.Context, root string, event *compon
 			}
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	event.State = "working"
+	emit(*event)
 	if event.ID == "nekoray" {
 		if err := extractPortable(filepath.Join(stage, "app.zip"), filepath.Join(stage, "validate"), runtime.GOOS); err != nil {
 			return err
@@ -186,6 +203,9 @@ func (s *releaseService) install(ctx context.Context, root string, event *compon
 		return err
 	}
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		digest, err := fileSHA256(filepath.Join(stage, entry.Name()))
 		if err != nil {
 			return err
@@ -201,6 +221,9 @@ func (s *releaseService) install(ctx context.Context, root string, event *compon
 	}
 
 	destination := filepath.Join(parent, candidate.Revision)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := os.Rename(stage, destination); err != nil {
 		// A previous attempt may have installed this immutable revision already.
 		// Compare every output before selecting it.
@@ -347,7 +370,7 @@ func portableEntryAllowed(name string, directory bool) bool {
 		return false
 	}
 	switch name {
-	case "nekobox", "nekobox.exe", "nekobox_core", "nekobox_core.exe", "launcher", "updater",
+	case "nekobox", "nekobox.exe", "launcher", "updater",
 		"updater.exe", "nekobox.png", "geoip.dat", "geosite.dat", "geoip.db", "geosite.db",
 		"geoip.metadb", "license", "license.txt", "readme.md", "qt.conf", "qtbase_zh_cn.qm":
 		return true
@@ -403,7 +426,7 @@ func extractPortable(archive, destination, platform string) error {
 		}
 		mode := member.Mode().Perm() | 0600
 		switch top {
-		case "nekobox", "nekobox_core", "launcher", "updater":
+		case "nekobox", "launcher", "updater":
 			mode |= 0111
 		}
 		err = errors.Join(copyArchiveMember(input, dest, int64(member.UncompressedSize64), mode), input.Close())
@@ -411,7 +434,7 @@ func extractPortable(archive, destination, platform string) error {
 			return err
 		}
 	}
-	for _, name := range []string{executable("nekobox", platform), executable("nekobox_core", platform), portableHelper(platform)} {
+	for _, name := range []string{executable("nekobox", platform), portableHelper(platform)} {
 		info, err := os.Stat(filepath.Join(destination, name))
 		if err != nil || !info.Mode().IsRegular() || info.Size() == 0 {
 			return fmt.Errorf("portable archive does not contain %s", name)

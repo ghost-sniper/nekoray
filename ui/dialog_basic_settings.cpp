@@ -7,12 +7,14 @@
 #include "ui/Icon.hpp"
 #include "main/GuiUtils.hpp"
 #include "main/NekoGui.hpp"
+#include "main/ManagedComponents.hpp"
 
 #include <QStyleFactory>
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QTimer>
+#include <QFormLayout>
 
 class ExtraCoreWidget : public QWidget {
 public:
@@ -154,7 +156,22 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
 
     // Core
 
-    ui->groupBox_core->setTitle(software_core_name);
+    ui->groupBox_core->setTitle(tr("%1 options").arg(software_core_name));
+    auto *managedStatus = new QFormLayout;
+    ui->managedCoreLayout->insertLayout(0, managedStatus);
+    for (const auto &core : {QStringLiteral("sing-box"), QStringLiteral("xray"), QStringLiteral("mihomo")}) {
+        auto *label = new QLabel(ui->managedCoreBox);
+        label->setObjectName("managed-core-" + core);
+        label->setTextFormat(Qt::PlainText);
+        const auto title = core == "xray" ? QStringLiteral("Xray") :
+                           core == "mihomo" ? QStringLiteral("Mihomo") : core;
+        managedStatus->addRow(title, label);
+    }
+    refreshManagedCores();
+    connect(ui->openUpdateCenter, &QPushButton::clicked, this, [this] {
+        emit updateCenterRequested();
+        refreshManagedCores();
+    });
     //
     CACHE.extraCore = QString2QJsonObject(NekoGui::dataStore->extraCore->core_map);
     if (!CACHE.extraCore.contains("naive")) CACHE.extraCore.insert("naive", "");
@@ -168,7 +185,7 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     //
     connect(ui->extra_core_add, &QPushButton::clicked, this, [=] {
         bool ok;
-        auto s = QInputDialog::getText(nullptr, tr("Add"),
+        auto s = QInputDialog::getText(this, tr("Add"),
                                        tr("Please input the core name."),
                                        QLineEdit::Normal, "", &ok)
                      .trimmed();
@@ -179,7 +196,7 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     });
     connect(ui->extra_core_del, &QPushButton::clicked, this, [=] {
         bool ok;
-        auto s = QInputDialog::getItem(nullptr, tr("Delete"),
+        auto s = QInputDialog::getItem(this, tr("Delete"),
                                        tr("Please select the core name."),
                                        CACHE.extraCore.keys(), 0, false, &ok);
         if (s.isEmpty() || !ok) return;
@@ -210,6 +227,17 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
 
 DialogBasicSettings::~DialogBasicSettings() {
     delete ui;
+}
+
+void DialogBasicSettings::refreshManagedCores() {
+    for (auto *label : ui->managedCoreBox->findChildren<QLabel *>()) {
+        if (!label->objectName().startsWith("managed-core-")) continue;
+        const auto core = label->objectName().mid(QStringLiteral("managed-core-").size());
+        const auto path = NekoGui::ManagedCoreProgram(core);
+        const auto version = NekoGui::ManagedComponentVersion(core);
+        label->setText(path.isEmpty() ? tr("Not installed") : version.isEmpty() ? tr("Installed") : version);
+        label->setToolTip(path);
+    }
 }
 
 void DialogBasicSettings::accept() {

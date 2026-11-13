@@ -13,14 +13,23 @@ namespace NekoGui {
         return QDir::current().absoluteFilePath("components");
     }
 
-    QString ManagedComponentFile(const QString &component, const QString &name) {
-        const QDir dir(ManagedComponentsRoot() + "/" + component);
-        QFile manifest(dir.filePath("current.json"));
+    static QJsonObject managedManifest(const QString &component) {
+        QFile manifest(ManagedComponentsRoot() + "/" + component + "/current.json");
         if (!manifest.open(QIODevice::ReadOnly)) return {};
-        const auto revision = QJsonDocument::fromJson(manifest.read(8192)).object().value("revision").toString();
+        const auto metadata = QJsonDocument::fromJson(manifest.read(8192)).object();
+        const auto revision = metadata.value("revision").toString();
         static const QRegularExpression validRevision(QStringLiteral("\\A[0-9a-f]{64}\\z"));
-        if (!validRevision.match(revision).hasMatch()) return {};
-        const QFileInfo info(dir.filePath(revision + "/" + name));
+        return validRevision.match(revision).hasMatch() ? metadata : QJsonObject();
+    }
+
+    QString ManagedComponentVersion(const QString &component) {
+        return managedManifest(component).value("version").toString();
+    }
+
+    QString ManagedComponentFile(const QString &component, const QString &name) {
+        const auto revision = managedManifest(component).value("revision").toString();
+        if (revision.isEmpty()) return {};
+        const QFileInfo info(ManagedComponentsRoot() + "/" + component + "/" + revision + "/" + name);
         return info.isFile() && info.size() > 0 ? info.absoluteFilePath() : QString();
     }
 
@@ -32,6 +41,16 @@ namespace NekoGui {
 #endif
         const auto file = ManagedComponentFile(core, name);
         return !file.isEmpty() && QFileInfo(file).isExecutable() ? file : QString();
+    }
+
+    QProcessEnvironment SingBoxEnvironment(const QString &program) {
+        auto environment = QProcessEnvironment::systemEnvironment();
+#ifdef Q_OS_LINUX
+        const auto directory = QFileInfo(program).absolutePath();
+        const auto inherited = environment.value("LD_LIBRARY_PATH");
+        environment.insert("LD_LIBRARY_PATH", inherited.isEmpty() ? directory : directory + ":" + inherited);
+#endif
+        return environment;
     }
 
     QString UpdateHelperProgram() {

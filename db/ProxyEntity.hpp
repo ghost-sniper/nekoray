@@ -31,7 +31,7 @@ namespace NekoGui {
         int gid = 0;
         int latency = 0;
         std::shared_ptr<NekoGui_fmt::AbstractBean> bean;
-        std::shared_ptr<NekoGui_traffic::TrafficData> traffic_data = std::make_shared<NekoGui_traffic::TrafficData>("");
+        std::shared_ptr<NekoGui_traffic::TrafficData> traffic_data = std::make_shared<NekoGui_traffic::TrafficData>();
 
         QString full_test_report;
 

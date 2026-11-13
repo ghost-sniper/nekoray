@@ -48,10 +48,6 @@
         <translation>核心</translation>
     </message>
     <message>
-        <source>Extra Core</source>
-        <translation>其他核心</translation>
-    </message>
-    <message>
         <source>Select</source>
         <translation>选择</translation>
     </message>
@@ -218,6 +214,30 @@
     <message>
         <source>Mixed (SOCKS+HTTP) Listen Port</source>
         <translation>Mixed (SOCKS+HTTP) 监听端口</translation>
+    </message>
+    <message>
+        <source>Official external cores</source>
+        <translation>官方外部核心</translation>
+    </message>
+    <message>
+        <source>Update Center</source>
+        <translation>更新中心</translation>
+    </message>
+    <message>
+        <source>Custom external cores</source>
+        <translation>自定义外部核心</translation>
+    </message>
+    <message>
+        <source>%1 options</source>
+        <translation>%1 选项</translation>
+    </message>
+    <message>
+        <source>Not installed</source>
+        <translation>未安装</translation>
+    </message>
+    <message>
+        <source>Installed</source>
+        <translation>已安装</translation>
     </message>
 </context>
 <context>
@@ -718,40 +738,8 @@ For more information, see the document &quot;Configuration/DNS&quot;.</source>
         <translation>代理进程名</translation>
     </message>
     <message>
-        <source>Whether blacklisted or whitelisted, your traffic will be handled by nekobox_core (sing-tun). This is NOT equal to &quot;process mode&quot; of some software.</source>
-        <translation>无论是黑名单还是白名单，您的流量都将由 nekobox_core (sing-tun) 处理。这不等于某些软件的「进程模式」。</translation>
-    </message>
-    <message>
-        <source>Troubleshooting</source>
-        <translation>故障排除</translation>
-    </message>
-    <message>
-        <source>If you have trouble starting VPN, you can force reset nekobox_core process here.
-
-If still not working, see documentation for more information.
-https://matsuridayo.github.io/n-configuration/#vpn-tun</source>
-        <translation>如果您在启动 Tun 时遇到问题，您可以在此处强制重置 nekobox_core 进程。
-
-如果仍然无法正常工作，请参阅文档以获取更多信息。
-https://matsuridayo.github.io/n-configuration/#vpn-tun</translation>
-    </message>
-    <message>
-        <source>Reset</source>
-        <translation>重置</translation>
-    </message>
-    <message>
-        <source>Cancel</source>
-        <translation>取消</translation>
-    </message>
-    <message>
-        <source>Internal Tun</source>
-        <translation>内部 Tun</translation>
-    </message>
-    <message>
-        <source>Add a tun inbound to the profile startup, instead of using two processes.
-This needs to be run NekoBox with administrator privileges.</source>
-        <translation>在配置文件启动时添加一个tun inbound，而不是使用两个进程。
-这需要以管理员权限运行NekoBox。</translation>
+        <source>Traffic matched by these TUN rules is handled by sing-box.</source>
+        <translation>符合这些 TUN 规则的流量由 sing-box 处理。</translation>
     </message>
 </context>
 <context>
@@ -1499,16 +1487,16 @@ Split by line.</source>
         <translation>延迟</translation>
     </message>
     <message>
-        <source>UDP latency</source>
-        <translation>UDP 延迟</translation>
+        <source>UDP connectivity</source>
+        <translation>UDP 连通性</translation>
     </message>
     <message>
         <source>Download speed</source>
         <translation>下载速度</translation>
     </message>
     <message>
-        <source>In and Out IP</source>
-        <translation>入口出口 IP</translation>
+        <source>Server and exit IP</source>
+        <translation>服务器与出口 IP</translation>
     </message>
     <message>
         <source>Test Options</source>
@@ -1531,8 +1519,8 @@ Split by line.</source>
         <translation>无法启动更新助手。请重启 Nekoray 后重试。</translation>
     </message>
     <message>
-        <source>Stop the external core configuration before enabling TUN.</source>
-        <translation>启用 TUN 前，请先停止外部核心配置。</translation>
+        <source>Stop the current configuration before enabling Nekoray TUN.</source>
+        <translation>启用 Nekoray TUN 前，请先停止当前配置。</translation>
     </message>
     <message>
         <source>Core not installed</source>
@@ -1551,12 +1539,32 @@ Split by line.</source>
         <translation>无法复制更新助手。</translation>
     </message>
     <message>
-        <source>Wait for the profile to start before enabling TUN.</source>
-        <translation>请等待当前配置启动后再启用 TUN。</translation>
+        <source>Wait for the current profile operation before changing TUN.</source>
+        <translation>请等待当前配置操作完成，再切换 TUN。</translation>
     </message>
     <message>
-        <source>Could not stop the previous profile.</source>
-        <translation>无法停止上一个配置。</translation>
+        <source>Traffic: %1</source>
+        <translation>流量：%1</translation>
+    </message>
+    <message>
+        <source>Install pkexec to grant TUN permissions.</source>
+        <translation>请安装 pkexec 以授予 TUN 权限。</translation>
+    </message>
+    <message>
+        <source>Could not grant TUN permissions to sing-box.</source>
+        <translation>无法为 sing-box 授予 TUN 权限。</translation>
+    </message>
+    <message>
+        <source>Set the sing-box Clash API controller to a local IP address and port.</source>
+        <translation>请为 sing-box Clash API 设置本机 IP 地址和端口。</translation>
+    </message>
+    <message>
+        <source>Speedtest finished.</source>
+        <translation>测速已完成。</translation>
+    </message>
+    <message>
+        <source>Speed test cancelled.</source>
+        <translation>测速已取消。</translation>
     </message>
 </context>
 <context>
@@ -1604,46 +1612,12 @@ Deleted %3 Profiles:
 %4</translation>
     </message>
     <message>
-        <source>Proxy: %1
-Direct: %2</source>
-        <translation>代理: %1
-直连: %2</translation>
-    </message>
-    <message>
         <source>Used: %1 Remain: %2 Expire: %3</source>
         <translation>已用 %1 剩余 %2 过期 %3</translation>
     </message>
     <message>
         <source>Core not found: %1</source>
         <translation>找不到 &quot;%1&quot; 核心。请前往设置</translation>
-    </message>
-    <message>
-        <source>Update</source>
-        <translation>更新</translation>
-    </message>
-    <message>
-        <source>No update</source>
-        <translation>无更新</translation>
-    </message>
-    <message>
-        <source>Open in browser</source>
-        <translation>浏览器打开</translation>
-    </message>
-    <message>
-        <source>Close</source>
-        <translation>关闭</translation>
-    </message>
-    <message>
-        <source>Update is ready, restart to install?</source>
-        <translation>更新已下载好，重启应用？</translation>
-    </message>
-    <message>
-        <source>Update found: %1
-Release note:
-%2</source>
-        <translation>检测到更新: %1
-更新日志:
-%2</translation>
     </message>
     <message>
         <source>Unavailable</source>
@@ -1724,8 +1698,8 @@ Release note:
 %1</translation>
     </message>
     <message>
-        <source>The external core did not open its local SOCKS listener. See the core log.</source>
-        <translation>外部核心未启动本地 SOCKS 监听。请查看核心日志。</translation>
+        <source>%1 did not open its local listener. See the core log.</source>
+        <translation>%1 未开启本地监听，请查看核心日志。</translation>
     </message>
     <message>
         <source>Unknown external core.</source>
@@ -1770,6 +1744,26 @@ Release note:
     <message>
         <source>Disable Nekoray TUN before starting an external core configuration.</source>
         <translation>启动外部核心配置前，请先禁用 Nekoray TUN。</translation>
+    </message>
+    <message>
+        <source>Full sing-box configurations cannot be used in a proxy chain.</source>
+        <translation>完整的 sing-box 配置无法用于代理链。</translation>
+    </message>
+    <message>
+        <source>Disable Nekoray TUN before starting a full sing-box configuration. You can configure TUN in its JSON.</source>
+        <translation>启动完整的 sing-box 配置前，请先关闭 Nekoray TUN。可在原生 JSON 中设置 TUN。</translation>
+    </message>
+    <message>
+        <source>This sing-box configuration uses TUN. Grant TUN permissions before starting it.</source>
+        <translation>此 sing-box 配置使用 TUN。请先授予 TUN 权限。</translation>
+    </message>
+    <message>
+        <source>Invalid sing-box JSON: %1</source>
+        <translation>sing-box JSON 无效：%1</translation>
+    </message>
+    <message>
+        <source>Install %1 resources from the update center.</source>
+        <translation>请从更新中心安装 %1 资源。</translation>
     </message>
 </context>
 <context>
@@ -1948,6 +1942,18 @@ Release note:
     <message>
         <source>Releases</source>
         <translation>发行页</translation>
+    </message>
+    <message>
+        <source>Download cancelled.</source>
+        <translation>下载已取消</translation>
+    </message>
+    <message>
+        <source>Cancelling…</source>
+        <translation>正在取消…</translation>
+    </message>
+    <message>
+        <source>Cancel download</source>
+        <translation>取消下载</translation>
     </message>
 </context>
 </TS>

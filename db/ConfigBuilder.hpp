@@ -8,11 +8,11 @@ namespace NekoGui {
     public:
         QString error;
         QString missingManagedCore;
+        bool requiresNoTun = false;
         QJsonObject coreConfig;
 
-        QList<std::shared_ptr<NekoGui_traffic::TrafficData>> outboundStats; // all, but not including "bypass" "block"
-        std::shared_ptr<NekoGui_traffic::TrafficData> outboundStat;         // main
-        QStringList ignoreConnTag;
+        bool nativeSingBox = false;
+        bool migrateLegacyConfig = true;
 
         std::list<std::shared_ptr<NekoGui_fmt::ExternalBuildResult>> extRs;
     };
@@ -54,7 +54,5 @@ namespace NekoGui {
     QString BuildChainInternal(int chainId, const QList<std::shared_ptr<ProxyEntity>> &ents,
                                const std::shared_ptr<BuildConfigStatus> &status);
 
-    QString WriteVPNSingBoxConfig();
-
-    QString WriteVPNLinuxScript(const QString &configPath);
+    QString PrepareSingBoxConfig(QJsonObject &config, const QString &program);
 } // namespace NekoGui

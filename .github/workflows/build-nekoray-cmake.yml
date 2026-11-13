@@ -44,7 +44,6 @@ jobs:
         if: steps.cache-common.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          [ ${{ matrix.cross_os }} == public_res ] || ./libs/get_source.sh
           [ ${{ matrix.cross_os }} == public_res ] || GOOS=${{ matrix.cross_os }} GOARCH=${{ matrix.cross_arch }} ./libs/build_go.sh
           [ ${{ matrix.cross_os }} == public_res ] || exit 0
           ./libs/build_public_res.sh

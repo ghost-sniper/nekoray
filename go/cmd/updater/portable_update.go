@@ -123,8 +123,13 @@ func replacePortable(unpacked, backup, installDir string, rename func(string, st
 			}
 		}
 	}()
+	// Remove the legacy core within the same rollback transaction as the replacement files.
+	obsoleteCore := executable("nekobox_core", runtime.GOOS)
+	names := []string{obsoleteCore}
 	for _, entry := range entries {
-		name := entry.Name()
+		names = append(names, entry.Name())
+	}
+	for _, name := range names {
 		destination := filepath.Join(installDir, name)
 		change := replacement{name: name}
 		if _, err := os.Lstat(destination); err == nil {
@@ -136,6 +141,9 @@ func replacePortable(unpacked, backup, installDir string, rename func(string, st
 			return err, nil
 		}
 		changes = append(changes, change)
+		if name == obsoleteCore {
+			continue
+		}
 		if err := rename(filepath.Join(unpacked, name), destination); err != nil {
 			return err, nil
 		}

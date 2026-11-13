@@ -12,7 +12,6 @@ namespace NekoGui {
 
     QString FindCoreAsset(const QString &name);
 
-    QString FindNekoBoxCoreRealPath();
 
     bool IsAdmin();
 } // namespace NekoGui

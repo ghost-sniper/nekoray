@@ -59,7 +59,9 @@ https://matsuridayo.github.io
 
 ### 官方外部核心和更新中心
 
-在更新中心安装官方 sing-box、Xray 或 Mihomo，再新建 **sing-box JSON**、**Xray JSON** 或 **Mihomo YAML** 配置，粘贴对应核心的完整配置。Nekoray 自动加入本地 SOCKS 入站，支持通过现有本地入口和系统代理使用。使用这些配置前需退出 TUN，并从代理链中移除该配置。
+首次启动代理前，从更新中心安装官方 sing-box。普通节点、代理链和 Nekoray TUN 都由该核心运行。创建 **sing-box JSON** 可直接运行完整的官方配置，Nekoray 会在需要时加入本地混合代理入口。创建 **Xray JSON** 或 **Mihomo YAML** 需要安装对应核心，通过 sing-box 提供本地代理入口和系统代理。完整原生配置可独立启动。sing-box JSON 可自行配置 TUN。
+
+从 4.1.0 或更早的便携版升级时，请解压新包到新目录，并复制旧版的 `config` 目录。旧更新器要求发行包包含 `nekobox_core`，因此这次需要手动升级。
 
 内置核心随本体更新。更新中心也可独立更新 GeoIP 和 GeoSite。便携版可在重启时安装本体更新，Debian 和 AppImage 用户可从更新中心打开本体发行页。
 
@@ -112,13 +114,11 @@ Core:
 - [XTLS/Xray-core](https://github.com/XTLS/Xray-core) ( 3.10 <= Version <= 3.26 )
 - [MatsuriDayo/Xray-core](https://github.com/MatsuriDayo/Xray-core) ( 3.10 <= Version <= 3.26 )
 - [SagerNet/sing-box](https://github.com/SagerNet/sing-box)
-- [Matsuridayo/sing-box-extra](https://github.com/MatsuriDayo/sing-box-extra)
 
 Gui:
 
 - [Qv2ray](https://github.com/Qv2ray/Qv2ray)
 - [Qt](https://www.qt.io/)
-- [protobuf](https://github.com/protocolbuffers/protobuf)
 - [yaml-cpp](https://github.com/jbeder/yaml-cpp)
 - [zxing-cpp](https://github.com/nu-book/zxing-cpp)
 - [QHotkey](https://github.com/Skycoder42/QHotkey)

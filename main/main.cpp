@@ -1,4 +1,5 @@
 #include <csignal>
+#include <QTimer>
 
 #include <QApplication>
 #include <QDir>
@@ -18,11 +19,10 @@
 #include "sys/windows/MiniDump.h"
 #endif
 
-void signal_handler(int signum) {
-    if (qApp) {
-        GetMainWindow()->on_commitDataRequest();
-        qApp->exit();
-    }
+volatile std::sig_atomic_t terminationRequested = 0;
+
+void signal_handler(int) {
+    terminationRequested = 1;
 }
 
 QTranslator* trans = nullptr;
@@ -238,5 +238,12 @@ int main(int argc, char* argv[]) {
     });
 
     UI_InitMainWindow();
+    QTimer terminationTimer;
+    QObject::connect(&terminationTimer, &QTimer::timeout, GetMainWindow(), [] {
+        if (!terminationRequested) return;
+        terminationRequested = 0;
+        GetMainWindow()->on_menu_exit_triggered();
+    });
+    terminationTimer.start(200);
     return QApplication::exec();
 }

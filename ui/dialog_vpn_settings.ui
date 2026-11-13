@@ -119,24 +119,6 @@
         </property>
        </widget>
       </item>
-      <item>
-       <widget class="QCheckBox" name="single_core">
-        <property name="toolTip">
-         <string>Add a tun inbound to the profile startup, instead of using two processes.
-This needs to be run NekoBox with administrator privileges.</string>
-        </property>
-        <property name="text">
-         <string>Internal Tun</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="hide_console">
-        <property name="text">
-         <string>Hide Console</string>
-        </property>
-       </widget>
-      </item>
      </layout>
     </widget>
    </item>
@@ -173,7 +155,7 @@ This needs to be run NekoBox with administrator privileges.</string>
      <item>
       <widget class="QCheckBox" name="whitelist_mode">
        <property name="toolTip">
-        <string>Whether blacklisted or whitelisted, your traffic will be handled by nekobox_core (sing-tun). This is NOT equal to &quot;process mode&quot; of some software.</string>
+        <string>Traffic matched by these TUN rules is handled by sing-box.</string>
        </property>
        <property name="text">
         <string>Whitelist mode</string>
@@ -192,13 +174,6 @@ This needs to be run NekoBox with administrator privileges.</string>
         </size>
        </property>
       </spacer>
-     </item>
-     <item>
-      <widget class="QPushButton" name="troubleshooting">
-       <property name="text">
-        <string>Troubleshooting</string>
-       </property>
-      </widget>
      </item>
      <item>
       <widget class="QDialogButtonBox" name="buttonBox">

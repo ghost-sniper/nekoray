@@ -265,7 +265,6 @@ namespace NekoGui {
         _add(new configItem("vpn_impl", &vpn_implementation, itemType::integer));
         _add(new configItem("vpn_mtu", &vpn_mtu, itemType::integer));
         _add(new configItem("vpn_ipv6", &vpn_ipv6, itemType::boolean));
-        _add(new configItem("vpn_hide_console", &vpn_hide_console, itemType::boolean));
         _add(new configItem("vpn_strict_route", &vpn_strict_route, itemType::boolean));
         _add(new configItem("vpn_bypass_process", &vpn_rule_process, itemType::string));
         _add(new configItem("vpn_bypass_cidr", &vpn_rule_cidr, itemType::string));
@@ -283,7 +282,6 @@ namespace NekoGui {
         _add(new configItem("core_box_clash_api", &core_box_clash_api, itemType::integer));
         _add(new configItem("core_box_clash_api_secret", &core_box_clash_api_secret, itemType::string));
         _add(new configItem("core_box_underlying_dns", &core_box_underlying_dns, itemType::string));
-        _add(new configItem("vpn_internal_tun", &vpn_internal_tun, itemType::boolean));
     }
 
     void DataStore::UpdateStartedId(int id) {
@@ -437,31 +435,18 @@ namespace NekoGui {
         return {};
     }
 
-    QString FindNekoBoxCoreRealPath() {
-        auto fn = QApplication::applicationDirPath() + "/nekobox_core";
-        auto fi = QFileInfo(fn);
-        if (fi.isSymLink()) return fi.symLinkTarget();
-        return fn;
-    }
-
-    short isAdminCache = -1;
-
-    // IsAdmin 主要判断：有无权限启动 Tun
     bool IsAdmin() {
-        if (isAdminCache >= 0) return isAdminCache;
-
-        bool admin = false;
 #ifdef Q_OS_WIN
-        admin = Windows_IsInAdmin();
-#else
-#ifdef Q_OS_LINUX
-        admin |= Linux_GetCapString(FindNekoBoxCoreRealPath()).contains("cap_net_admin");
-#endif
-        admin |= geteuid() == 0;
-#endif
-
-        isAdminCache = admin;
+        static const bool admin = Windows_IsInAdmin();
         return admin;
-    };
+#else
+        if (geteuid() == 0) return true;
+#ifdef Q_OS_LINUX
+        const auto program = QFileInfo(ManagedCoreProgram("sing-box")).canonicalFilePath();
+        if (!program.isEmpty()) return Linux_GetCapString(program).contains("cap_net_admin");
+#endif
+        return false;
+#endif
+    }
 
 } // namespace NekoGui

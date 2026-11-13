@@ -22,7 +22,12 @@ public slots:
 
 private:
     Ui::DialogBasicSettings *ui;
+    void refreshManagedCores();
 
+signals:
+    void updateCenterRequested();
+
+private:
     struct {
         QJsonObject extraCore;
         QString custom_inbound;

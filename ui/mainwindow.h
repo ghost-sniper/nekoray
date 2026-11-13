@@ -15,6 +15,13 @@
 #include <QShortcut>
 #include <QSemaphore>
 #include <QMutex>
+#include <QElapsedTimer>
+#include <QUrl>
+#include <atomic>
+
+class QNetworkAccessManager;
+class QNetworkReply;
+class QTimer;
 
 #include "GroupSort.hpp"
 
@@ -22,10 +29,6 @@
 #include "main/GuiUtils.hpp"
 
 #endif
-
-namespace NekoGui_sys {
-    class CoreProcess;
-}
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -51,7 +54,7 @@ public:
 
     void neko_start(int _id = -1);
 
-    void neko_stop(bool crash = false, bool sem = false);
+    void neko_stop(bool wait = false);
 
     void neko_set_spmode_system_proxy(bool enable, bool save = true);
 
@@ -64,8 +67,6 @@ public:
     void refresh_connection_list(const QJsonArray &arr);
 
     void RegisterHotkey(bool unregister);
-
-    bool StopVPNProcess(bool unconditional = false);
 
 signals:
 
@@ -141,8 +142,21 @@ private:
     QShortcut *shortcut_ctrl_f = new QShortcut(QKeySequence("Ctrl+F"), this);
     QShortcut *shortcut_esc = new QShortcut(QKeySequence("Esc"), this);
     //
-    NekoGui_sys::CoreProcess *core_process = nullptr;
-    qint64 vpn_pid = 0;
+    bool profileTransition = false;
+    bool runningRequiresNoTun = false;
+    bool runningTun = false;
+    bool exitPending = false;
+    bool speedtesting = false;
+    std::shared_ptr<std::atomic_bool> cancelSpeedtest;
+    QUrl coreApiUrl;
+    QByteArray coreApiSecret;
+    QNetworkAccessManager *coreApi = nullptr;
+    QNetworkReply *statsReply = nullptr;
+    QTimer *statsTimer = nullptr;
+    QElapsedTimer statsClock;
+    qint64 previousUpload = 0;
+    qint64 previousDownload = 0;
+    unsigned profileGeneration = 0;
     //
     bool qvLogAutoScoll = true;
     QTextDocument *qvLogDocument = new QTextDocument(this);
@@ -155,10 +169,6 @@ private:
     //
     int proxy_last_order = -1;
     bool select_mode = false;
-    QMutex mu_starting;
-    QMutex mu_stopping;
-    QMutex mu_exit;
-    QSemaphore sem_stopped;
     int exit_reason = 0;
     bool updateDialogOpen = false;
     QString updateWorker;
@@ -182,17 +192,16 @@ private:
 
     void HotkeyEvent(const QString &key);
 
-    bool StartVPNProcess();
-
-    // grpc and ...
-
-    static void setup_grpc();
+    void setup_core();
+    void restore_running_tun();
+    void poll_core_stats();
+    void clear_running_profile();
+    void finish_profile_transition();
+    void finish_exit();
 
     void speedtest_current_group(int mode, bool test_group);
 
     void speedtest_current();
-
-    static void stop_core_daemon();
 
     void CheckUpdate();
 

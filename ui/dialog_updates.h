@@ -8,6 +8,7 @@
 class QLabel;
 class QPushButton;
 class QTableWidget;
+class QThread;
 
 class UpdateDialog : public QDialog {
     Q_OBJECT
@@ -15,11 +16,15 @@ class UpdateDialog : public QDialog {
 public:
     UpdateDialog(const QString &root, bool portable, std::function<bool(const QString &)> canApply,
                  std::function<void()> stopProfile, QWidget *parent);
+    ~UpdateDialog() override;
 
     QString appRevision() const { return restartRevision; }
 
 protected:
     void reject() override;
+
+signals:
+    void proxyRequested(int id, const QString &url, int generation);
 
 private:
     struct Row {
@@ -40,12 +45,15 @@ private:
     std::function<void()> stopProfile;
     QList<Row> rows;
     QProcess *process;
+    QThread *proxyThread;
     QTableWidget *table;
     QPushButton *checkButton;
     QPushButton *updateButton;
     QPushButton *closeButton;
     QLabel *status;
     QString operation;
+    int generation = 0;
+    bool cancelling = false;
     QString restartRevision;
     QByteArray diagnostics;
     QStringList pending;
@@ -55,6 +63,7 @@ private:
     void updateSelected();
     void run(const QString &command, const QList<int> &indexes);
     void readEvents();
+    void cancelDownload();
     void finish(int code, QProcess::ExitStatus exitStatus);
     void performAction(int index);
     void refresh();

@@ -445,22 +445,39 @@ func runComponents(args []string) error {
 		}
 		selections[id] = revision
 	}
-	service := releaseService{
-		client: &http.Client{Timeout: 10 * time.Minute, CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			host := req.URL.Hostname()
-			github := host == "github.com" || host == "api.github.com" ||
-				host == "release-assets.githubusercontent.com" || host == "objects.githubusercontent.com" ||
-				host == "github-releases.githubusercontent.com"
-			if len(via) >= 8 || req.URL.Scheme != "https" || !github {
-				return errors.New("invalid download redirect")
-			}
-			return nil
-		}},
-		api: "https://api.github.com", cache: make(map[string]*releaseResponse),
-	}
 	encoder := json.NewEncoder(os.Stdout)
-	emit := func(event componentEvent) { _ = encoder.Encode(event) }
+	var output sync.Mutex
+	emit := func(event componentEvent) {
+		output.Lock()
+		defer output.Unlock()
+		_ = encoder.Encode(event)
+	}
 	ctx := context.Background()
+	var transport *http.Transport
+	if os.Getenv("NEKORAY_UPDATE_CONTROL") == "1" && mode != "activate" {
+		control, controlledContext := newUpdateControl(ctx, os.Stdin, encoder, &output)
+		ctx = controlledContext
+		transport = http.DefaultTransport.(*http.Transport).Clone()
+		transport.Proxy = control.proxy
+		defer transport.CloseIdleConnections()
+	}
+	client := &http.Client{Timeout: 10 * time.Minute, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		host := req.URL.Hostname()
+		github := host == "github.com" || host == "api.github.com" ||
+			host == "release-assets.githubusercontent.com" || host == "objects.githubusercontent.com" ||
+			host == "github-releases.githubusercontent.com"
+		if len(via) >= 8 || req.URL.Scheme != "https" || !github {
+			return errors.New("invalid download redirect")
+		}
+		return nil
+	}}
+	if transport != nil {
+		client.Transport = transport
+	}
+	service := releaseService{
+		client: client,
+		api:    "https://api.github.com", cache: make(map[string]*releaseResponse),
+	}
 	if mode == "check" {
 		results := make(chan componentEvent, len(componentIDs))
 		for _, id := range componentIDs {
@@ -475,6 +492,9 @@ func runComponents(args []string) error {
 		return nil
 	}
 	for _, id := range componentIDs {
+		if ctx.Err() != nil {
+			break
+		}
 		if selections[id] == "" {
 			continue
 		}
@@ -489,6 +509,9 @@ func runComponents(args []string) error {
 			continue
 		}
 		event, candidate := service.status(ctx, root, id, appVersion, pre)
+		if ctx.Err() != nil {
+			break
+		}
 		if event.State != "available" {
 			emit(event)
 			continue
@@ -499,6 +522,9 @@ func runComponents(args []string) error {
 			continue
 		}
 		err := service.install(ctx, root, &event, candidate, emit)
+		if errors.Is(err, context.Canceled) || (err != nil && ctx.Err() != nil) {
+			break
+		}
 		if err != nil {
 			event.State, event.Error = "error", err.Error()
 		}

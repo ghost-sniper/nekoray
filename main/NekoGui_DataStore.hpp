@@ -64,16 +64,11 @@ namespace NekoGui {
     public:
         // Running
 
-        QString core_token;
-        int core_port = 19810;
         int started_id = -1919;
-        bool core_running = false;
         bool prepare_exit = false;
         bool spmode_vpn = false;
         bool spmode_system_proxy = false;
-        bool need_keep_vpn_off = false;
         QString appdataDir = "";
-        QStringList ignoreConnTag = {};
 
         std::unique_ptr<Routing> routing;
         int imported_count = 0;
@@ -144,11 +139,9 @@ namespace NekoGui {
 
         // VPN
         bool fake_dns = false;
-        bool vpn_internal_tun = true;
         int vpn_implementation = 0;
         int vpn_mtu = 9000;
         bool vpn_ipv6 = false;
-        bool vpn_hide_console = true;
         bool vpn_strict_route = false;
         bool vpn_rule_white = false;
         QString vpn_rule_process = "";

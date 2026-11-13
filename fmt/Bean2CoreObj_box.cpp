@@ -198,8 +198,14 @@ namespace NekoGui_fmt {
             outbound["down_mbps"] = downloadMbps;
 
             if (!hopPort.trimmed().isEmpty()) {
-                outbound["hop_ports"] = hopPort;
-                outbound["hop_interval"] = hopInterval;
+                QJsonArray ports;
+                for (auto port : hopPort.split(',')) {
+                    port = port.trimmed().replace('-', ':');
+                    if (port.isEmpty()) continue;
+                    ports.append(port.contains(':') ? port : port + ":" + port);
+                }
+                outbound["server_ports"] = ports;
+                if (hopInterval > 0) outbound["hop_interval"] = QString::number(hopInterval) + "s";
             }
             if (!obfsPassword.isEmpty()) {
                 outbound["obfs"] = QJsonObject{

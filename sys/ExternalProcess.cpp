@@ -14,54 +14,48 @@
 namespace NekoGui_sys {
 
     ExternalProcess::ExternalProcess() : QProcess() {
-        // qDebug() << "[Debug] ExternalProcess()" << this << running_ext;
         this->env = QProcessEnvironment::systemEnvironment().toStringList();
     }
 
-    ExternalProcess::~ExternalProcess() {
-        // qDebug() << "[Debug] ~ExternalProcess()" << this << running_ext;
-    }
+    ExternalProcess::~ExternalProcess() { Kill(); }
 
     void ExternalProcess::Start() {
         if (started) return;
         started = true;
 
-        if (managed) {
-            connect(this, &QProcess::readyReadStandardOutput, this, [&]() {
-                auto log = readAllStandardOutput();
-                if (logCounter.fetchAndAddRelaxed(log.count("\n")) > NekoGui::dataStore->max_log_line) return;
-                MW_show_log_ext_vt100(log);
-            });
-            connect(this, &QProcess::readyReadStandardError, this, [&]() {
-                MW_show_log_ext_vt100(readAllStandardError().trimmed());
-            });
-            connect(this, &QProcess::errorOccurred, this, [&](QProcess::ProcessError error) {
-                if (!killed) {
+        connect(this, &QProcess::readyReadStandardOutput, this, [&]() {
+            auto log = readAllStandardOutput();
+            if (logCounter.fetchAndAddRelaxed(log.count("\n")) > NekoGui::dataStore->max_log_line) return;
+            MW_show_log_ext_vt100(log);
+        });
+        connect(this, &QProcess::readyReadStandardError, this, [&]() {
+            MW_show_log_ext_vt100(readAllStandardError().trimmed());
+        });
+        connect(this, &QProcess::errorOccurred, this, [&](QProcess::ProcessError) {
+            if (!killed) {
+                crashed = true;
+                MW_show_log_ext(tag, "errorOccurred:" + errorString());
+                if (reportFailure) MW_dialog_message("ExternalProcess", "Crashed");
+            }
+        });
+        connect(this, &QProcess::stateChanged, this, [&](QProcess::ProcessState state) {
+            if (state == QProcess::NotRunning) {
+                if (killed) { // 用户命令退出
+                    MW_show_log_ext(tag, "External core stopped");
+                } else if (!crashed) { // 异常退出
                     crashed = true;
-                    MW_show_log_ext(tag, "errorOccurred:" + errorString());
+                    MW_show_log_ext(tag, "[Error] Program exited accidentally: " + errorString());
                     if (reportFailure) MW_dialog_message("ExternalProcess", "Crashed");
                 }
-            });
-            connect(this, &QProcess::stateChanged, this, [&](QProcess::ProcessState state) {
-                if (state == QProcess::NotRunning) {
-                    if (killed) { // 用户命令退出
-                        MW_show_log_ext(tag, "External core stopped");
-                    } else if (!crashed) { // 异常退出
-                        crashed = true;
-                        MW_show_log_ext(tag, "[Error] Program exited accidentally: " + errorString());
-                        Kill();
-                        if (reportFailure) MW_dialog_message("ExternalProcess", "Crashed");
-                    }
-                }
-            });
-            MW_show_log_ext(tag, "External core starting: " + program + " " + arguments.join(" "));
-        }
+            }
+        });
+        MW_show_log_ext(tag, "External core starting: " + program + " " + arguments.join(" "));
 
         QProcess::setEnvironment(env);
         QProcess::start(program, arguments);
     }
 
-    QString ExternalProcess::StartChecked(const QStringList &checkArguments, const QList<QPair<QString, QString>> &assets, int port) {
+    QString ExternalProcess::CheckConfiguration(const QStringList &checkArguments, const QList<QPair<QString, QString>> &assets) {
         QDir directory(workingDirectory());
         if (!QDir().mkpath(directory.absolutePath()))
             return QObject::tr("Cannot create the core data directory.");
@@ -103,123 +97,48 @@ namespace NekoGui_sys {
                 .arg(QString::fromUtf8(check.readAll().left(8192)).trimmed());
         }
 
+        return {};
+    }
+
+    QString ExternalProcess::StartChecked(const QStringList &checkArguments, const QList<QPair<QString, QString>> &assets, int port) {
+        const auto error = CheckConfiguration(checkArguments, assets);
+        if (!error.isEmpty()) return error;
         Start();
+        return WaitUntilReady(QStringLiteral("127.0.0.1"), port, true);
+    }
+
+    QString ExternalProcess::WaitUntilReady(const QString &host, int port, bool socks) {
         if (!waitForStarted(3000)) return errorString();
         QElapsedTimer deadline;
         deadline.start();
         while (state() == QProcess::Running && deadline.elapsed() < 5000) {
             QTcpSocket socket;
             socket.setProxy(QNetworkProxy::NoProxy);
-            socket.connectToHost(QHostAddress::LocalHost, port);
+            socket.connectToHost(host, port);
             if (socket.waitForConnected(100)) {
+                if (!socks) return {};
                 socket.write(QByteArray::fromHex("050100"));
                 socket.waitForBytesWritten(100);
-                while (socket.bytesAvailable() < 2 && socket.waitForReadyRead(100)) {}
+                if (socket.bytesAvailable() < 2) socket.waitForReadyRead(100);
                 if (socket.read(2) == QByteArray::fromHex("0500")) return {};
             }
             waitForReadyRead(50);
         }
         Kill();
-        return QObject::tr("The external core did not open its local SOCKS listener. See the core log.");
+        return QObject::tr("%1 did not open its local listener. See the core log.").arg(tag);
     }
 
     void ExternalProcess::Kill() {
         if (killed) return;
         killed = true;
 
-        if (!crashed) {
-            QProcess::kill();
-            QProcess::waitForFinished(500);
-        }
-    }
-
-    //
-
-    QElapsedTimer coreRestartTimer;
-
-    CoreProcess::CoreProcess(const QString &core_path, const QStringList &args) : ExternalProcess() {
-        ExternalProcess::managed = false;
-        ExternalProcess::program = core_path;
-        ExternalProcess::arguments = args;
-
-        connect(this, &QProcess::readyReadStandardOutput, this, [&]() {
-            auto log = readAllStandardOutput();
-            if (!NekoGui::dataStore->core_running) {
-                if (log.contains("grpc server listening")) {
-                    // The core really started
-                    NekoGui::dataStore->core_running = true;
-                    if (start_profile_when_core_is_up >= 0) {
-                        MW_dialog_message("ExternalProcess", "CoreStarted," + Int2String(start_profile_when_core_is_up));
-                        start_profile_when_core_is_up = -1;
-                    }
-                } else if (log.contains("failed to serve")) {
-                    // The core failed to start
-                    QProcess::kill();
-                }
-            }
-            if (logCounter.fetchAndAddRelaxed(log.count("\n")) > NekoGui::dataStore->max_log_line) return;
-            MW_show_log(log);
-        });
-        connect(this, &QProcess::readyReadStandardError, this, [&]() {
-            auto log = readAllStandardError().trimmed();
-            if (show_stderr) {
-                MW_show_log(log);
-                return;
-            }
-            if (log.contains("token is set")) {
-                show_stderr = true;
-            }
-        });
-        connect(this, &QProcess::errorOccurred, this, [&](QProcess::ProcessError error) {
-            if (error == QProcess::ProcessError::FailedToStart) {
-                failed_to_start = true;
-                MW_show_log("start core error occurred: " + errorString() + "\n");
-            }
-        });
-        connect(this, &QProcess::stateChanged, this, [&](QProcess::ProcessState state) {
-            if (state == QProcess::NotRunning) {
-                NekoGui::dataStore->core_running = false;
-            }
-
-            if (!NekoGui::dataStore->prepare_exit && state == QProcess::NotRunning) {
-                if (failed_to_start) return; // no retry
-                if (restarting) return;
-
-                MW_dialog_message("ExternalProcess", "CoreCrashed");
-
-                // Retry rate limit
-                if (coreRestartTimer.isValid()) {
-                    if (coreRestartTimer.restart() < 10 * 1000) {
-                        coreRestartTimer = QElapsedTimer();
-                        MW_show_log("[Error] " + QObject::tr("Core exits too frequently, stop automatic restart this profile."));
-                        return;
-                    }
-                } else {
-                    coreRestartTimer.start();
-                }
-
-                // Restart
-                start_profile_when_core_is_up = NekoGui::dataStore->started_id;
-                MW_show_log("[Error] " + QObject::tr("Core exited, restarting."));
-                setTimeout([=] { Restart(); }, this, 1000);
-            }
-        });
-    }
-
-    void CoreProcess::Start() {
-        show_stderr = false;
-        // cwd: same as GUI, at ./config
-        ExternalProcess::Start();
-        write((NekoGui::dataStore->core_token + "\n").toUtf8());
-    }
-
-    void CoreProcess::Restart() {
-        restarting = true;
-        QProcess::kill();
-        QProcess::waitForFinished(500);
-        ExternalProcess::started = false;
-        Start();
-        restarting = false;
+        if (state() == QProcess::NotRunning) return;
+#ifndef Q_OS_WIN
+        terminate();
+        if (waitForFinished(1000)) return;
+#endif
+        kill();
+        waitForFinished(1000);
     }
 
 } // namespace NekoGui_sys

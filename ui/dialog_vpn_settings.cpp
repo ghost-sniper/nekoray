@@ -15,12 +15,7 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
     ui->vpn_implementation->setCurrentIndex(NekoGui::dataStore->vpn_implementation);
     ui->vpn_mtu->setCurrentText(Int2String(NekoGui::dataStore->vpn_mtu));
     ui->vpn_ipv6->setChecked(NekoGui::dataStore->vpn_ipv6);
-    ui->hide_console->setChecked(NekoGui::dataStore->vpn_hide_console);
-#ifndef Q_OS_WIN
-    ui->hide_console->setVisible(false);
-#endif
     ui->strict_route->setChecked(NekoGui::dataStore->vpn_strict_route);
-    ui->single_core->setChecked(NekoGui::dataStore->vpn_internal_tun);
     //
     D_LOAD_STRING_PLAIN(vpn_rule_cidr)
     D_LOAD_STRING_PLAIN(vpn_rule_process)
@@ -49,33 +44,12 @@ void DialogVPNSettings::accept() {
     NekoGui::dataStore->fake_dns = ui->fake_dns->isChecked();
     NekoGui::dataStore->vpn_mtu = mtu;
     NekoGui::dataStore->vpn_ipv6 = ui->vpn_ipv6->isChecked();
-    NekoGui::dataStore->vpn_hide_console = ui->hide_console->isChecked();
     NekoGui::dataStore->vpn_strict_route = ui->strict_route->isChecked();
     NekoGui::dataStore->vpn_rule_white = ui->whitelist_mode->isChecked();
-    bool isInternalChanged = NekoGui::dataStore->vpn_internal_tun != ui->single_core->isChecked();
-    NekoGui::dataStore->vpn_internal_tun = ui->single_core->isChecked();
     //
     D_SAVE_STRING_PLAIN(vpn_rule_cidr)
     D_SAVE_STRING_PLAIN(vpn_rule_process)
     //
-    QStringList msg{"UpdateDataStore"};
-    if (isInternalChanged) {
-        msg << "NeedRestart";
-    } else {
-        msg << "VPNChanged";
-    }
-    MW_dialog_message("", msg.join(","));
+    MW_dialog_message("", "UpdateDataStore,VPNChanged");
     QDialog::accept();
-}
-
-void DialogVPNSettings::on_troubleshooting_clicked() {
-    auto r = QMessageBox::information(this, tr("Troubleshooting"),
-                                      tr("If you have trouble starting VPN, you can force reset nekobox_core process here.\n\n"
-                                         "If still not working, see documentation for more information.\n"
-                                         "https://matsuridayo.github.io/n-configuration/#vpn-tun"),
-                                      tr("Reset"), tr("Cancel"), "",
-                                      1, 1);
-    if (r == 0) {
-        GetMainWindow()->StopVPNProcess(true);
-    }
 }

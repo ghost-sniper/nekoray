@@ -8,21 +8,78 @@
 #include <QJsonDocument>
 #include <QLabel>
 #include <QMessageBox>
+#include <QNetworkProxyFactory>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QTableWidget>
+#include <QThread>
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
+#ifdef Q_OS_LINUX
+#include <QLibrary>
+#endif
 
 namespace {
     const QUrl forkReleases(QStringLiteral("https://github.com/ghost-sniper/nekoray/releases"));
+
+    class ProxyResolver : public QObject {
+        Q_OBJECT
+    signals:
+        void resolved(const QByteArray &message, int generation);
+    };
+
+    QJsonObject systemProxy(const QUrl &target) {
+#ifdef Q_OS_LINUX
+        // The bundled Qt can be built without libproxy. Use the desktop resolver
+        // directly when it is installed, preserving per-URL bypass and PAC rules.
+        static QLibrary library(QStringLiteral("proxy"), 1);
+        using Factory = void *;
+        static const auto create = reinterpret_cast<Factory (*)()>(library.resolve("px_proxy_factory_new"));
+        static const auto destroy = reinterpret_cast<void (*)(Factory)>(library.resolve("px_proxy_factory_free"));
+        static const auto query = reinterpret_cast<char **(*)(Factory, const char *)>(library.resolve("px_proxy_factory_get_proxies"));
+        static const auto release = reinterpret_cast<void (*)(char **)>(library.resolve("px_proxy_factory_free_proxies"));
+        if (create && destroy && query && release) {
+            if (const auto factory = create()) {
+                auto **addresses = query(factory, target.toEncoded().constData());
+                const auto address = addresses && addresses[0] ? QString::fromUtf8(addresses[0]) : QString();
+                if (addresses) release(addresses);
+                destroy(factory);
+                if (!address.isEmpty()) {
+                    QUrl proxy(address);
+                    if (proxy.scheme() == "direct") return {{"action", "proxy"}};
+                    if (proxy.scheme() == "socks") proxy.setScheme("socks5");
+                    return {{"action", "proxy"}, {"proxy", proxy.toString(QUrl::FullyEncoded)}};
+                }
+            }
+        }
+#endif
+        const auto choices = QNetworkProxyFactory::systemProxyForQuery(QNetworkProxyQuery(target));
+        for (const auto &choice : choices) {
+            if (choice.type() == QNetworkProxy::NoProxy) break;
+            if (choice.type() != QNetworkProxy::HttpProxy && choice.type() != QNetworkProxy::HttpCachingProxy &&
+                choice.type() != QNetworkProxy::Socks5Proxy) continue;
+            QUrl proxy;
+            proxy.setScheme(choice.type() == QNetworkProxy::Socks5Proxy ? "socks5" : "http");
+            proxy.setHost(choice.hostName());
+            proxy.setPort(choice.port());
+            proxy.setUserName(choice.user());
+            proxy.setPassword(choice.password());
+            return {{"action", "proxy"}, {"proxy", proxy.toString(QUrl::FullyEncoded)}};
+        }
+#ifdef Q_OS_LINUX
+        return {{"action", "environment"}};
+#else
+        return {{"action", "proxy"}};
+#endif
+    }
 }
 
 UpdateDialog::UpdateDialog(const QString &root, bool portable, std::function<bool(const QString &)> canApply,
                            std::function<void()> stopProfile, QWidget *parent)
     : QDialog(parent), root(root), helper(NekoGui::UpdateHelperProgram()), portable(portable),
-      canApply(std::move(canApply)), stopProfile(std::move(stopProfile)), process(new QProcess(this)) {
+      canApply(std::move(canApply)), stopProfile(std::move(stopProfile)), process(new QProcess(this)),
+      proxyThread(new QThread) {
     setWindowTitle(tr("Update Center"));
     setWindowModality(Qt::ApplicationModal);
     resize(1020, 410);
@@ -74,6 +131,22 @@ UpdateDialog::UpdateDialog(const QString &root, bool portable, std::function<boo
     connect(closeButton, &QPushButton::clicked, this, &UpdateDialog::reject);
     connect(table, &QTableWidget::itemChanged, this, [this] { refresh(); });
     connect(process, &QProcess::readyReadStandardOutput, this, &UpdateDialog::readEvents);
+    auto *resolver = new ProxyResolver;
+    resolver->moveToThread(proxyThread);
+    connect(proxyThread, &QThread::finished, resolver, &QObject::deleteLater);
+    connect(proxyThread, &QThread::finished, proxyThread, &QObject::deleteLater);
+    connect(this, &UpdateDialog::proxyRequested, resolver, [resolver](int id, const QString &url, int requestGeneration) {
+        if (QThread::currentThread()->isInterruptionRequested()) return;
+        auto response = systemProxy(QUrl(url));
+        response.insert("id", id);
+        const auto message = QJsonDocument(response).toJson(QJsonDocument::Compact) + '\n';
+        emit resolver->resolved(message, requestGeneration);
+    });
+    connect(resolver, &ProxyResolver::resolved, this, [this](const QByteArray &message, int requestGeneration) {
+        if (requestGeneration == generation && !cancelling && process->state() == QProcess::Running)
+            process->write(message);
+    }, Qt::QueuedConnection);
+    proxyThread->start();
     connect(process, &QProcess::readyReadStandardError, this, [this] {
         diagnostics += process->readAllStandardError();
         if (diagnostics.size() > 4096) diagnostics = diagnostics.right(4096);
@@ -93,7 +166,16 @@ UpdateDialog::UpdateDialog(const QString &root, bool portable, std::function<boo
     if (!helper.isEmpty()) QTimer::singleShot(0, this, &UpdateDialog::check);
 }
 
+UpdateDialog::~UpdateDialog() {
+    proxyThread->requestInterruption();
+    proxyThread->quit();
+}
+
 void UpdateDialog::reject() {
+    if (operation == "install") {
+        cancelDownload();
+        return;
+    }
     if (!operation.isEmpty() && operation != "check") return;
     if (process->state() != QProcess::NotRunning) {
         disconnect(process, nullptr, this, nullptr);
@@ -127,18 +209,13 @@ void UpdateDialog::run(const QString &command, const QList<int> &indexes) {
     if (helper.isEmpty() || !operation.isEmpty()) return;
     auto environment = QProcessEnvironment::systemEnvironment();
     const auto data = NekoGui::dataStore;
-    if (data->started_id >= 0 && data->sub_use_proxy && IsValidPort(data->inbound_socks_port)) {
-        QUrl proxy("http://127.0.0.1");
-        proxy.setPort(data->inbound_socks_port);
-        if (data->inbound_auth->NeedAuth()) {
-            proxy.setUserName(data->inbound_auth->username);
-            proxy.setPassword(data->inbound_auth->password);
-        }
-        environment.insert("HTTPS_PROXY", proxy.toString(QUrl::FullyEncoded));
-    }
+    environment.insert("NEKORAY_UPDATE_CONTROL", "1");
     process->setProcessEnvironment(environment);
     QStringList arguments{"components", command, root, NKR_VERSION, data->check_include_pre ? "true" : "false"};
     operation = command;
+    ++generation;
+    cancelling = false;
+    if (command == "install") status->clear();
     diagnostics.clear();
     pending.clear();
     autoActivate.clear();
@@ -156,6 +233,11 @@ void UpdateDialog::run(const QString &command, const QList<int> &indexes) {
 void UpdateDialog::readEvents() {
     while (process->canReadLine()) {
         const auto event = QJsonDocument::fromJson(process->readLine()).object();
+        if (event.value("type").toString() == "proxy") {
+            if (!cancelling)
+                emit proxyRequested(event.value("request_id").toInt(), event.value("url").toString(), generation);
+            continue;
+        }
         const auto id = event.value("id").toString();
         for (auto &row : rows) {
             if (row.id != id) continue;
@@ -166,7 +248,7 @@ void UpdateDialog::readEvents() {
             row.error = event.value("error").toString();
             if (row.state == "downloading") {
                 row.error = tr("Downloading %1%").arg(event.value("progress").toInt());
-            } else {
+            } else if (row.state != "working") {
                 pending.removeAll(id);
                 if (operation == "install" && row.state == "staged" && id != "nekoray") autoActivate.append(id);
             }
@@ -176,22 +258,34 @@ void UpdateDialog::readEvents() {
     refresh();
 }
 
+void UpdateDialog::cancelDownload() {
+    if (operation != "install" || cancelling) return;
+    cancelling = true;
+    process->write("{\"action\":\"cancel\"}\n");
+    process->closeWriteChannel();
+    refresh();
+}
+
 void UpdateDialog::finish(int code, QProcess::ExitStatus exitStatus) {
     if (operation.isEmpty()) return;
     readEvents();
+    const bool cancelled = cancelling;
     if (!pending.isEmpty()) {
         auto error = QString::fromUtf8(diagnostics).trimmed();
         if (error.isEmpty()) error = tr("The update helper exited without a result.");
         for (auto &row : rows) {
             if (!pending.contains(row.id)) continue;
-            row.state = "error";
-            row.error = error;
+            row.state = cancelled ? "cancelled" : "error";
+            row.error = cancelled ? QString() : error;
         }
     }
-    if (code != 0 || exitStatus != QProcess::NormalExit) {
+    if (cancelled) {
+        status->setText(tr("Download cancelled."));
+    } else if (code != 0 || exitStatus != QProcess::NormalExit) {
         status->setText(tr("The update helper did not finish successfully."));
     }
     operation.clear();
+    cancelling = false;
     QList<int> activate;
     for (int index = 0; index < rows.size(); ++index)
         if (autoActivate.contains(rows[index].id) && canApply(rows[index].id)) activate.append(index);
@@ -223,7 +317,7 @@ void UpdateDialog::performAction(int index) {
         } else {
             status->setText(tr("Wait for the running profile or tests to stop, then apply the update."));
         }
-    } else if (row.state == "available" || (row.state == "error" && !row.revision.isEmpty())) {
+    } else if (row.state == "available" || row.state == "cancelled" || (row.state == "error" && !row.revision.isEmpty())) {
         run("install", {index});
     } else if (row.state == "error") {
         check();
@@ -237,7 +331,8 @@ void UpdateDialog::refresh() {
     for (int index = 0; index < rows.size(); ++index) {
         const auto &row = rows[index];
         const bool appLink = row.id == "nekoray" && (!portable || helper.isEmpty());
-        const bool installable = !appLink && (row.state == "available" || (row.state == "error" && !row.revision.isEmpty()));
+        const bool installable = !appLink && (row.state == "available" || row.state == "cancelled" ||
+                                              (row.state == "error" && !row.revision.isEmpty()));
         auto *name = table->item(index, 0);
         name->setFlags(Qt::ItemIsEnabled | (installable && !busy ? Qt::ItemIsUserCheckable : Qt::NoItemFlags));
         if (!installable && !busy) name->setCheckState(Qt::Unchecked);
@@ -262,6 +357,7 @@ void UpdateDialog::refresh() {
         else if (row.state == "current") state = tr("Up to date");
         else if (row.state == "installed") state = tr("Updated");
         else if (row.state == "available") { state = tr("Update available"); action = tr("Download"); }
+        else if (row.state == "cancelled") { state = tr("Download cancelled."); action = tr("Retry"); }
         else if (row.state == "staged") {
             state = tr("Ready to apply");
             action = row.id == "nekoray" ? tr("Restart") : tr("Apply");
@@ -269,6 +365,7 @@ void UpdateDialog::refresh() {
             state = row.error;
             action = tr("Retry");
         } else if (row.state == "downloading") state = row.error;
+        if (cancelling && pending.contains(row.id)) state = tr("Cancelling…");
         table->item(index, 3)->setText(state);
         table->item(index, 3)->setToolTip(state);
         if (appLink) action = tr("Releases");
@@ -278,5 +375,8 @@ void UpdateDialog::refresh() {
     }
     checkButton->setEnabled(!busy && !helper.isEmpty());
     updateButton->setEnabled(!busy && selected && !helper.isEmpty());
-    closeButton->setEnabled(!busy || operation == "check");
+    closeButton->setText(operation == "install" ? tr("Cancel download") : tr("Close"));
+    closeButton->setEnabled(!busy || operation == "check" || (operation == "install" && !cancelling));
 }
+
+#include "dialog_updates.moc"

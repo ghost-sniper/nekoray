@@ -66,19 +66,9 @@ find_package(Threads)
 #### NKR EXTERNAL ####
 
 if (NKR_NO_EXTERNAL)
-    set(NKR_NO_GRPC 1)
     set(NKR_NO_YAML 1)
     set(NKR_NO_ZXING 1)
     set(NKR_NO_QHOTKEY 1)
-endif ()
-
-# grpc
-if (NKR_NO_GRPC)
-    nkr_add_compile_definitions(NKR_NO_GRPC)
-else ()
-    # My proto
-    include("cmake/myproto.cmake")
-    list(APPEND NKR_EXTERNAL_TARGETS myproto)
 endif ()
 
 # yaml-cpp
@@ -111,7 +101,6 @@ endif ()
 
 if (DBG_CMAKE)
     print_all_variables()
-    print_target_properties(myproto)
     print_target_properties(yaml-cpp)
     print_target_properties(ZXing::ZXing)
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_COMMAND} -E time")
@@ -142,10 +131,7 @@ set(PROJECT_SOURCES
         3rdparty/qv2ray/v3/components/GeositeReader/GeositeReader.cpp
         3rdparty/qv2ray/v3/components/GeositeReader/picoproto.cpp
 
-        rpc/gRPC.cpp
-
         db/Database.cpp
-        db/traffic/TrafficLooper.cpp
         db/ProfileFilter.cpp
         db/ConfigBuilder.cpp
 
@@ -164,7 +150,7 @@ set(PROJECT_SOURCES
         ui/ThemeManager.cpp
         ui/Icon.cpp
 
-        ui/mainwindow_grpc.cpp
+        ui/mainwindow_core.cpp
         ui/mainwindow.cpp
         ui/dialog_updates.cpp
         ui/mainwindow.h

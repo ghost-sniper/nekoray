@@ -274,7 +274,7 @@ namespace NekoGui_fmt {
 
     ExternalBuildResult CustomBean::BuildManagedExternal(int port) const {
         ExternalBuildResult result;
-        if (core != "xray" && core != "mihomo" && core != "sing-box") {
+        if (core != "xray" && core != "mihomo") {
             result.error = QObject::tr("Unknown external core.");
             return result;
         }
@@ -330,10 +330,9 @@ namespace NekoGui_fmt {
                 return result;
             }
             auto inbounds = config.value("inbounds").toArray();
-            const bool xray = core == "xray";
             for (const auto &inbound : inbounds) {
                 const auto object = inbound.toObject();
-                if (object.value(xray ? "protocol" : "type") == "tun") {
+                if (object.value("protocol") == "tun") {
                     result.error = QObject::tr("Disable TUN in the external core configuration.");
                     return result;
                 }
@@ -343,14 +342,9 @@ namespace NekoGui_fmt {
                 }
             }
             QJsonObject inbound{{"tag", tag}, {"listen", "127.0.0.1"}};
-            if (xray) {
-                inbound["protocol"] = "socks";
-                inbound["port"] = port;
-                inbound["settings"] = QJsonObject{{"auth", "noauth"}, {"udp", true}};
-            } else {
-                inbound["type"] = "socks";
-                inbound["listen_port"] = port;
-            }
+            inbound["protocol"] = "socks";
+            inbound["port"] = port;
+            inbound["settings"] = QJsonObject{{"auth", "noauth"}, {"udp", true}};
             inbounds.append(inbound);
             config["inbounds"] = inbounds;
             result.config_export = QJsonObject2QString(config, false);
@@ -383,7 +377,7 @@ namespace NekoGui_fmt {
                 if (source.isEmpty()) source = NekoGui::ManagedComponentFile(core, name);
                 if (!source.isEmpty()) result.assets.append(qMakePair(source, name));
             }
-        } else if (core == "mihomo") {
+        } else {
             result.arguments = QStringList{"-d", result.workingDirectory, "-f", filename};
             result.checkArguments = QStringList{"-t"} + result.arguments;
             for (const auto &id : {QStringLiteral("geoip"), QStringLiteral("geosite")}) {
@@ -393,14 +387,6 @@ namespace NekoGui_fmt {
             }
             const auto metadb = NekoGui::ManagedComponentFile("geoip", "geoip.metadb");
             if (!metadb.isEmpty()) result.assets.append(qMakePair(metadb, QStringLiteral("geoip.metadb")));
-        } else {
-            result.arguments = QStringList{"run", "-c", filename};
-            result.checkArguments = QStringList{"check", "-c", filename};
-#ifdef Q_OS_LINUX
-            const auto binaryDir = QFileInfo(result.program).absolutePath();
-            const auto inherited = env.value("LD_LIBRARY_PATH");
-            env.insert("LD_LIBRARY_PATH", inherited.isEmpty() ? binaryDir : binaryDir + ":" + inherited);
-#endif
         }
         result.env = env.toStringList();
         result.readyPort = port;

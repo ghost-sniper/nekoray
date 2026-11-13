@@ -161,10 +161,9 @@ func TestStageAndActivateGeo(t *testing.T) {
 func makePortableFixture(t *testing.T, platform string, extra map[string]string) string {
 	t.Helper()
 	files := map[string]string{
-		executable("nekobox", platform):      "new app",
-		executable("nekobox_core", platform): "new built-in core",
-		portableHelper(platform):             "new updater",
-		"config/groups/user.json":            "should never be installed",
+		executable("nekobox", platform): "new app",
+		portableHelper(platform):        "new updater",
+		"config/groups/user.json":       "should never be installed",
 	}
 	for name, data := range extra {
 		files[name] = data
@@ -237,7 +236,7 @@ func TestPortableReplacementRollback(t *testing.T) {
 	}
 	fail := errors.New("simulated file lock")
 	err, rollbackErr := replacePortable(unpacked, backup, install, func(from, to string) error {
-		if from == filepath.Join(unpacked, core) {
+		if from == filepath.Join(unpacked, portableHelper(runtime.GOOS)) {
 			return fail
 		}
 		return os.Rename(from, to)
@@ -258,6 +257,8 @@ func TestPortableReplacementRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 	assert(app, "new app")
-	assert(core, "new built-in core")
+	if _, err := os.Lstat(filepath.Join(install, core)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("obsolete built-in core is still installed: %v", err)
+	}
 	assert(userFile, "user data")
 }
