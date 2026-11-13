@@ -13,7 +13,6 @@
 #include <QProcess>
 #include <QTextDocument>
 #include <QShortcut>
-#include <QSemaphore>
 #include <QMutex>
 #include <QElapsedTimer>
 #include <QUrl>
@@ -21,6 +20,7 @@
 
 class QNetworkAccessManager;
 class QNetworkReply;
+class QNetworkRequest;
 class QTimer;
 
 #include "GroupSort.hpp"
@@ -54,7 +54,7 @@ public:
 
     void neko_start(int _id = -1);
 
-    void neko_stop(bool wait = false);
+    void neko_stop(bool exitAfterStop = false);
 
     void neko_set_spmode_system_proxy(bool enable, bool save = true);
 
@@ -195,6 +195,9 @@ private:
     void setup_core();
     void restore_running_tun();
     void poll_core_stats();
+    bool update_traffic_totals(const QJsonObject &snapshot);
+    QNetworkRequest final_stats_request();
+    void save_traffic_and_stop_processes(const QNetworkRequest &request);
     void clear_running_profile();
     void finish_profile_transition();
     void finish_exit();

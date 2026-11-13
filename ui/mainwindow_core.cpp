@@ -153,6 +153,8 @@ QNetworkRequest clashRequest(QUrl url, const QByteArray &secret, const QString &
     if (!secret.isEmpty()) request.setRawHeader("Authorization", "Bearer " + secret);
     return request;
 }
+
+constexpr int statsTimeoutMs = 1500;
 }
 
 void MainWindow::setup_core() {
@@ -171,28 +173,16 @@ void MainWindow::poll_core_stats() {
         (settings->traffic_loop_interval == 0 && !settings->connection_statistics)) return;
     auto reply = coreApi->get(clashRequest(coreApiUrl, coreApiSecret, "/connections"));
     statsReply = reply;
-    QTimer::singleShot(1500, reply, &QNetworkReply::abort);
+    QTimer::singleShot(statsTimeoutMs, reply, &QNetworkReply::abort);
     connect(reply, &QNetworkReply::finished, this, [this, reply, generation = profileGeneration] {
         if (statsReply == reply) statsReply = nullptr;
         reply->deleteLater();
         if (generation != profileGeneration || !running || reply->error() != QNetworkReply::NoError) return;
         const auto snapshot = QJsonDocument::fromJson(reply->readAll()).object();
-        const auto upload = snapshot["uploadTotal"].toVariant().toLongLong();
-        const auto download = snapshot["downloadTotal"].toVariant().toLongLong();
-        const auto elapsed = std::max<qint64>(1, statsClock.restart());
-        if (NekoGui::dataStore->traffic_loop_interval > 0) {
-            auto data = running->traffic_data;
-            const auto uploaded = std::max<qint64>(0, upload - previousUpload);
-            const auto downloaded = std::max<qint64>(0, download - previousDownload);
-            data->uplink += uploaded;
-            data->downlink += downloaded;
-            data->uplink_rate = uploaded * 1000 / elapsed;
-            data->downlink_rate = downloaded * 1000 / elapsed;
-            refresh_status(tr("Traffic: %1").arg(data->DisplaySpeed()));
+        if (update_traffic_totals(snapshot) && NekoGui::dataStore->traffic_loop_interval > 0) {
+            refresh_status(tr("Traffic: %1").arg(running->traffic_data->DisplaySpeed()));
             refresh_proxy_list(running->id);
         }
-        previousUpload = upload;
-        previousDownload = download;
         if (!NekoGui::dataStore->connection_statistics) return;
         QJsonArray connections;
         for (const auto &item : snapshot["connections"].toArray()) {
@@ -212,13 +202,65 @@ void MainWindow::poll_core_stats() {
     });
 }
 
+bool MainWindow::update_traffic_totals(const QJsonObject &snapshot) {
+    const auto upload = snapshot.value("uploadTotal");
+    const auto download = snapshot.value("downloadTotal");
+    if (!upload.isDouble() || !download.isDouble()) return false;
+    const auto uploadTotal = upload.toVariant().toLongLong();
+    const auto downloadTotal = download.toVariant().toLongLong();
+    if (uploadTotal < previousUpload || downloadTotal < previousDownload) return false;
+    const auto elapsed = std::max<qint64>(1, statsClock.restart());
+    if (NekoGui::dataStore->traffic_loop_interval > 0) {
+        auto data = running->traffic_data;
+        const auto uploaded = uploadTotal - previousUpload;
+        const auto downloaded = downloadTotal - previousDownload;
+        data->uplink += uploaded;
+        data->downlink += downloaded;
+        data->uplink_rate = uploaded * 1000 / elapsed;
+        data->downlink_rate = downloaded * 1000 / elapsed;
+    }
+    previousUpload = uploadTotal;
+    previousDownload = downloadTotal;
+    return true;
+}
+
+QNetworkRequest MainWindow::final_stats_request() {
+    if (statsReply) statsReply->abort();
+    if (running && NekoGui::dataStore->traffic_loop_interval > 0)
+        return clashRequest(coreApiUrl, coreApiSecret, "/connections");
+    return {};
+}
+
+void MainWindow::save_traffic_and_stop_processes(const QNetworkRequest &request) {
+    QJsonObject snapshot;
+    if (!request.url().isEmpty()) {
+        QNetworkAccessManager manager;
+        manager.setProxy(QNetworkProxy::NoProxy);
+        auto reply = manager.get(request);
+        QEventLoop loop;
+        connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+        QTimer::singleShot(statsTimeoutMs, reply, &QNetworkReply::abort);
+        if (!reply->isFinished()) loop.exec();
+        if (reply->error() == QNetworkReply::NoError)
+            snapshot = QJsonDocument::fromJson(reply->readAll()).object();
+    }
+
+    // Commit the final totals on the UI thread before releasing the running core.
+    QMetaObject::invokeMethod(this, [this, &request, &snapshot] {
+        if (!running) return;
+        if (!request.url().isEmpty() && !update_traffic_totals(snapshot))
+            show_log_impl(tr("Could not read final traffic totals from sing-box."));
+        if (NekoGui::profileManager->GetProfile(running->id) == running) running->Save();
+    }, Qt::BlockingQueuedConnection);
+    stopProcesses(profileProcesses);
+}
+
 void MainWindow::clear_running_profile() {
     ++profileGeneration;
     if (statsReply) statsReply->abort();
     if (running) {
         if (NekoGui::dataStore->spmode_system_proxy) ClearSystemProxy();
         const auto id = running->id;
-        if (NekoGui::profileManager->GetProfile(id) == running) running->Save();
         running.reset();
         refresh_proxy_list(id);
     }
@@ -302,13 +344,14 @@ void MainWindow::neko_start(int id) {
         break;
     }
     profileTransition = true;
+    const auto finalStats = final_stats_request();
     MW_show_log(">>>>>>>> " + tr("Starting profile %1").arg(ent->bean->DisplayTypeAndName()));
     runOnUiThread([=] {
         auto process = std::make_unique<Process>();
         auto error = prepareOfficial(*process, *result, program);
         const bool checked = error.isEmpty();
         if (checked) {
-            stopProcesses(profileProcesses);
+            if (!profileProcesses.empty()) save_traffic_and_stop_processes(finalStats);
             error = startExternal(*result, profileProcesses);
         }
         if (error.isEmpty()) {
@@ -330,7 +373,8 @@ void MainWindow::neko_start(int id) {
         const bool oldProcessExited = !checked && std::any_of(profileProcesses.begin(), profileProcesses.end(), [](const auto &child) {
             return child->state() == QProcess::NotRunning;
         });
-        if ((checked && !error.isEmpty()) || oldProcessExited) stopProcesses(profileProcesses);
+        if (checked && !error.isEmpty()) stopProcesses(profileProcesses);
+        if (oldProcessExited) save_traffic_and_stop_processes(finalStats);
         process.reset();
         runOnUiThread([=] {
             if (!error.isEmpty()) restore_running_tun();
@@ -357,25 +401,16 @@ void MainWindow::neko_start(int id) {
     }, DS_cores);
 }
 
-void MainWindow::neko_stop(bool wait) {
+void MainWindow::neko_stop(bool exitAfterStop) {
     if (profileTransition || !running) return;
     profileTransition = true;
-    if (wait) {
-        QSemaphore stopped;
-        runOnUiThread([&] {
-            stopProcesses(profileProcesses);
-            stopped.release();
-        }, DS_cores);
-        stopped.acquire();
-        clear_running_profile();
-        finish_profile_transition();
-        return;
-    }
-    runOnUiThread([this] {
-        stopProcesses(profileProcesses);
-        runOnUiThread([this] {
+    const auto finalStats = final_stats_request();
+    runOnUiThread([this, finalStats, exitAfterStop] {
+        save_traffic_and_stop_processes(finalStats);
+        runOnUiThread([this, exitAfterStop] {
             clear_running_profile();
-            finish_profile_transition();
+            if (exitAfterStop) finish_exit();
+            else finish_profile_transition();
         });
     }, DS_cores);
 }

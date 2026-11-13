@@ -637,8 +637,8 @@ void MainWindow::on_menu_exit_triggered() {
     NekoGui::dataStore->save_control_no_save = true;
     RegisterHotkey(true);
     exitPending = false;
-    neko_stop(true);
-    finish_exit();
+    if (running) neko_stop(true);
+    else finish_exit();
 }
 
 void MainWindow::finish_exit() {

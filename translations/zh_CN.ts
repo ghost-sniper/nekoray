@@ -1261,6 +1261,10 @@ End: %2</source>
         <translation>正在启动配置 %1</translation>
     </message>
     <message>
+        <source>Could not read final traffic totals from sing-box.</source>
+        <translation>无法从 sing-box 读取最后一次流量计数。</translation>
+    </message>
+    <message>
         <source>Stopping profile %1</source>
         <translation>正在停止配置 %1</translation>
     </message>
