@@ -739,32 +739,38 @@ void MainWindow::CheckUpdate() {
     if (dialog.appRevision().isEmpty()) return;
 
     // The detached copy must be outside the installation being replaced, especially on Windows.
-    QFile source(NekoGui::UpdateHelperProgram());
 #ifdef Q_OS_WIN
     const auto workerName = QStringLiteral("nekoray-updater-XXXXXX.exe");
 #else
     const auto workerName = QStringLiteral("nekoray-updater-XXXXXX");
 #endif
-    QTemporaryFile worker(QDir::temp().absoluteFilePath(workerName));
-    if (!source.open(QIODevice::ReadOnly) || !worker.open() ||
-        !worker.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner)) {
-        MessageBoxWarning(tr("Update Center"), tr("Could not prepare the update helper."));
-        return;
-    }
-    while (!source.atEnd()) {
-        const auto chunk = source.read(64 * 1024);
-        if (chunk.isEmpty() || worker.write(chunk) != chunk.size()) {
-            MessageBoxWarning(tr("Update Center"), tr("Could not copy the update helper."));
+    // QTemporaryFile keeps its writable descriptor until destruction, even after close().
+    {
+        QFile source(NekoGui::UpdateHelperProgram());
+        QTemporaryFile worker(QDir::temp().absoluteFilePath(workerName));
+        if (!source.open(QIODevice::ReadOnly) || !worker.open() ||
+            !worker.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner)) {
+            MessageBoxWarning(tr("Update Center"), tr("Could not prepare the update helper."));
             return;
         }
+        while (!source.atEnd()) {
+            const auto chunk = source.read(64 * 1024);
+            if (chunk.isEmpty() || worker.write(chunk) != chunk.size()) {
+                MessageBoxWarning(tr("Update Center"), tr("Could not copy the update helper."));
+                return;
+            }
+        }
+        if (!worker.flush()) {
+            MessageBoxWarning(tr("Update Center"), worker.errorString());
+            return;
+        }
+        updateWorker = worker.fileName();
+        if (updateWorker.isEmpty()) {
+            MessageBoxWarning(tr("Update Center"), tr("Could not prepare the update helper."));
+            return;
+        }
+        worker.setAutoRemove(false);
     }
-    if (!worker.flush()) {
-        MessageBoxWarning(tr("Update Center"), worker.errorString());
-        return;
-    }
-    worker.close();
-    worker.setAutoRemove(false);
-    updateWorker = worker.fileName();
     const bool launcher = qEnvironmentVariable("NKR_FROM_LAUNCHER") == "1";
     updateArguments = QStringList{"components", "apply", root, dialog.appRevision(), installDirectory,
                                   QString::number(QCoreApplication::applicationPid()), launcher ? "launcher" : "gui"};
